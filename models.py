@@ -76,6 +76,20 @@ def Decoder(img_channels = 3, init_channels = 128, hidden_channels = 256, blk_pe
   results = tf.keras.layers.Conv2D(2 * img_channels, (1,1), padding = 'same', kernel_initializer = tf.keras.initializers.RandomNormal(stddev = 1/sqrt(2**(group_num - 1) * 1 ** 2)))(results);
   return tf.keras.Model(inputs = inputs, outputs = results);
 
+def Preprocess(target_image_size = 256):
+  # NOTE: height and width must be greater than or equal to target_image_size
+  inputs = tf.keras.Input((None, None, 3)); # inputs.shape = (batch, height, width, 3)
+  smaller_side = tf.keras.layers.Lambda(lambda x: tf.math.reduce_min(tf.shape(x)[1:3]))(inputs); # smaller_side.shape = ()
+  scale = tf.keras.layers.Lambda(lambda x, t: t / x, arguments = {'t': target_image_size})(smaller_side); # scale.shape = ()
+  size = tf.keras.layers.Lambda(lambda x: tf.cast(tf.cast(tf.shape(x[0])[1:3], dtype = tf.float32) * x[1], dtype = tf.int32))([inputs, scale]); # size.shape = (2,)
+  results = tf.keras.layers.Lambda(lambda x: tf.image.resize(x[0], x[1], tf.image.ResizeMethod.LANCZOS5))([inputs, size]); # results.shape = (batch, height * scale, width * scale, 3)
+  # NOTE: the smaller side equals to target_image_size
+  results = tf.keras.layers.Lambda(lambda x, t: tf.pad(x, [[0,0],[t//2, t - t//2],[t//2, t - t//2],[0,0]]), arguments = {'t': target_image_size})(results); # results.shape = (batch, 256 + height * scale, 256 + width * scale, 3)
+  results = tf.keras.layers.Lambda(lambda x, t: tf.cond(tf.math.less(tf.shape(x)[1], tf.shape(x)[2]), 
+                                                        lambda: x[:,:,(tf.shape(x)[2] - 2*t)//2:(tf.shape(x)[2] - 2*t)//2+2*t,:],
+                                                        lambda: x[:,(tf.shape(x)[1] - 2*t)//2:(tf.shape(x)[1] - 2*t)//2+2*t,:,:]), arguments = {'t': target_image_size})(results); # results.shape = (batch, 2*target_image_size, 2*target_image_size, 3)
+  return tf.keras.Model(inputs = inputs, outputs = results);
+
 if __name__ == "__main__":
 
   import numpy as np;
@@ -87,4 +101,11 @@ if __name__ == "__main__":
   decoder = Decoder();
   decoder.save('decoder.h5');
   outputs = decoder(outputs);
+  print(outputs.shape);
+  preprocess = Preprocess();
+  inputs = np.random.normal(size = (4, 360, 640, 3));
+  outputs = preprocess(inputs);
+  print(outputs.shape);
+  inputs = np.random.normal(size = (4, 640, 360, 3));
+  outputs = preprocess(inputs);
   print(outputs.shape);
