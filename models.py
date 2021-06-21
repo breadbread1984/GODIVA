@@ -46,13 +46,13 @@ def DecoderBlock(input_channels, output_channels, total_layers):
   hidden_channels = output_channels // 4;
   inputs = tf.keras.Input((None, None, input_channels)); # inputs.shape = (batch, height, width, input_channels)
   results = tf.keras.layers.ReLU()(inputs);
-  results = tf.keras.layers.Conv2D(hidden_channels, (1,1), padding = 'same', kernel_initializer = tf.keras.initializers.RandomNormal(stddev = 1/sqrt(input_channels * 3 ** 2)))(results);
+  results = tf.keras.layers.Conv2D(hidden_channels, (1,1), padding = 'same', kernel_initializer = tf.keras.initializers.RandomNormal(stddev = 1/sqrt(input_channels * 1 ** 2)))(results);
   results = tf.keras.layers.ReLU()(results);
   results = tf.keras.layers.Conv2D(hidden_channels, (3,3), padding = 'same', kernel_initializer = tf.keras.initializers.RandomNormal(stddev = 1/sqrt(hidden_channels * 3 ** 2)))(results);
   results = tf.keras.layers.ReLU()(results);
   results = tf.keras.layers.Conv2D(hidden_channels, (3,3), padding = 'same', kernel_initializer = tf.keras.initializers.RandomNormal(stddev = 1/sqrt(hidden_channels * 3 ** 2)))(results);
   results = tf.keras.layers.ReLU()(results);
-  results = tf.keras.layers.Conv2D(output_channels, (3,3), padding = 'same', kernel_initializer = tf.keras.initializers.RandomNormal(stddev = 1/sqrt(hidden_channels * 1 ** 2)))(results);
+  results = tf.keras.layers.Conv2D(output_channels, (3,3), padding = 'same', kernel_initializer = tf.keras.initializers.RandomNormal(stddev = 1/sqrt(hidden_channels * 3 ** 2)))(results);
   if input_channels != output_channels:
     short = tf.keras.layers.Conv2D(output_channels, (1,1), padding = 'same', kernel_initializer = tf.keras.initializers.RandomNormal(stddev = 1/sqrt(input_channels * 1 ** 2)))(inputs);
   else:
