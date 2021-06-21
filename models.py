@@ -102,6 +102,7 @@ def Postprocess(logit_laplace_eps = 0.1):
   inputs = tf.keras.Input((None, None, 3));
   results = tf.keras.layers.Lambda(lambda x, l: (x - l) / (1 - 2 * l), arguments = {'l': logit_laplace_eps})(inputs);
   results = tf.keras.layers.Lambda(lambda x: tf.clip_by_value(x, 0, 1))(results);
+  results = tf.keras.layers.Lambda(lambda x: tf.cast(255 * x, dtype = tf.uint8))(results);
   return tf.keras.Model(inputs = inputs, outputs = results);
 
 if __name__ == "__main__":
