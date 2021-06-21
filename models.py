@@ -69,8 +69,8 @@ def Decoder(img_channels = 3, init_channels = 128, hidden_channels = 256, blk_pe
   inputs = tf.keras.Input((None, None, vocab_size)); # inputs.shape = (batch, height, width, input_channels)
   results = tf.keras.layers.Conv2D(init_channels, (1,1), padding = 'same', kernel_initializer = tf.keras.initializers.RandomNormal(stddev = 1/sqrt(vocab_size * 1 ** 2)))(inputs); # results.shape = results.shape = (batch, height, width, hidden_channels)
   for i in range(group_num - 1, -1, -1):
-    ic = 2**i * hidden_channels;
-    oc = max(2**(i-1) * hidden_channels, hidden_channels);
+    ic = 2**(i+1) * hidden_channels;
+    oc = max(2**i * hidden_channels, hidden_channels);
     for j in range(blk_per_group):
       results = DecoderBlock(init_channels if i == group_num - 1 and j == 0 else (ic if j == 0 else oc), oc, blk_per_group * group_num)(results);
     if i != 0:
