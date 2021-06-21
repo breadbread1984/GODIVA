@@ -42,10 +42,8 @@ def Encoder(input_channels = 3, hidden_channels = 256, blk_per_group = 2, group_
 if __name__ == "__main__":
 
   import numpy as np;
-  encoder = Encoder(group_num = 8);
+  encoder = Encoder(group_num = 4);
   encoder.save('encoder.h5');
-  '''
-  inputs = np.random.normal(size = (4, 256, 256, 3));
+  inputs = np.random.normal(size = (4, 16, 16, 3));
   outputs = encoder(inputs);
   print(outputs.shape);
-  '''
