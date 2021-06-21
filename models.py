@@ -74,7 +74,7 @@ def Decoder(img_channels = 3, init_channels = 128, hidden_channels = 256, blk_pe
     for j in range(blk_per_group):
       results = DecoderBlock(init_channels if i == group_num - 1 and j == 0 else (ic if j == 0 else oc), oc, blk_per_group * group_num)(results);
     if i != 0:
-      results = tf.keras.layers.UpSampling2D(size = (2, 2))(results);
+      results = tf.keras.layers.UpSampling2D(size = (2, 2), interpolation = 'nearest')(results);
   results = tf.keras.layers.ReLU()(results);
   results = tf.keras.layers.Conv2D(2 * img_channels, (1,1), padding = 'same', kernel_initializer = tf.keras.initializers.RandomNormal(stddev = 1/sqrt(2**(group_num - 1) * 1 ** 2)))(results);
   results = tf.keras.layers.Lambda(lambda x, c: tf.math.sigmoid(x[...,:c]), arguments = {'c': img_channels})(results);
