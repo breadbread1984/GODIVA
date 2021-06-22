@@ -2,6 +2,33 @@
 
 import tensorflow as tf;
 
+def Quantize(tf.keras.layers.Layer):
+  def __init__(self, dim, n_embed, decay = 0.99, eps = 1e-5):
+    self.dim = dim;
+    self.n_embed = n_embed;
+    self.decay = decay;
+    self.eps = eps;
+    super(Quantize, self).__init__(**kwargs);
+  def build(self, input_shape):
+    self.embed = self.add_weight(shape = (dim, self.n_embed), dtype = tf.float32, initializer = tf.keras.initializers.RandomNormal(stddev = 1.), name = 'embed');
+  def call(self, inputs):
+    flatten = tf.keras.layers.Reshape((self.dim))(inputs); # flatten.shape = (-1, dim)
+    # dist = (X - embed)^2 = X' * X - 2 * X' * Embed + trace(Embed' * Embed),  dist.shape = (-1, n_embed), euler distances to embedding vectors
+    dist = tf.keras.layers.Lambda(lambda x: tf.math.reduce_sum(tf.math.pow(x[0],2), axis = 1, keepdims = True) - 2 * tf.linalg.matmul(x[0], x[1]) + tf.math.reduce_sum(tf.math.pow(x[1],2), axis = 0, keepdims = True))([flatten, self.embed]);
+    embed_ind = tf.keras.layers.Lambda(lambda x: tf.math.argmax(x, axis = 1))(dist); # embed_ind.shape = (-1)
+    quantize = tf.keras.layers.Lambda(lambda x: tf.nn.embedding_lookup(tf.transpose(x[0]), x[1]))([self.embed, embed_ind]); # quantize.shape = (-1, dim)
+    diff = tf.keras.layers.Lambda(lambda x: tf.math.reduce_mean(tf.math.pow(x[0] - x[1], 2), axis = -1))([inputs, quantize]); # diff.shape = (-1,)
+    return quantize, embed_ind, diff;
+  def get_config(self):
+    config = super(Quantize, self).get_config();
+    config['dim'] = self.dim;
+    config['n_embed'] = self.n_embed;
+  @classmethod
+  def from_config(cls, config):
+    self.dim = config['dim'];
+    self.n_embed = config['n_embed'];
+    return cls(**config);
+
 def Encoder(img_channels = 3, hidden_channels = 128, vocab_size = 10000):
   inputs = tf.keras.Input((None, None, img_channels));
   results = tf.keras.layers.Conv2D(hidden_channels, (4,4), strides = (2,2), padding = 'same')(inputs);
