@@ -3,15 +3,15 @@
 import tensorflow as tf;
 
 class Quantize(tf.keras.layers.Layer):
-  def __init__(self, dim, n_embed, decay = 0.99, eps = 1e-5, **kwargs):
+  def __init__(self, dim = 128, n_embed = 10000, decay = 0.99, eps = 1e-5, **kwargs):
     self.dim = dim;
     self.n_embed = n_embed;
     self.decay = decay;
     self.eps = eps;
     super(Quantize, self).__init__(**kwargs);
   def build(self, input_shape):
-    # NOTE: all this weights are not trainable, because I manage them manually
-    # cluster_mean: cluster_meanding code book
+    # NOTE: all this weights are not trainable, because they are managed manually
+    # cluster_mean: cluster means which are used as codes for code book
     # cluster_size: how many samples falling in each cluster
     # cluster_sum: the respective sum of samples falling in each cluster
     self.cluster_mean = self.add_weight(shape = (self.dim, self.n_embed), dtype = tf.float32, initializer = tf.keras.initializers.RandomNormal(stddev = 1.), trainable = False, name = 'cluster_mean');
@@ -26,6 +26,7 @@ class Quantize(tf.keras.layers.Layer):
     quantize = tf.keras.layers.Lambda(lambda x: tf.nn.embedding_lookup(tf.transpose(x[0]), x[1]))([self.cluster_mean, cluster_index]); # quantize.shape = (n_sample, dim)
     diff = tf.keras.layers.Lambda(lambda x: tf.math.reduce_mean(tf.math.pow(x[0] - x[1], 2), axis = -1))([inputs, quantize]); # diff.shape = (n_sample,)
     if tf.keras.backend.learning_phase() == 1:
+      # NOTE: code book is updated during forward propagation
       cluster_index_onehot = tf.keras.layers.Lambda(lambda x, n: tf.one_hot(x, n), arguments = {'n': self.n_embed})(cluster_index); # cluster_index_onehot.shape = (n_sample, n_embed)
       cluster_size = tf.keras.layers.Lambda(lambda x: tf.math.reduce_sum(x, axis = 0))(cluster_index_onehot); # cluster_size.shape = (n_embed)
       cluster_sum = tf.keras.layers.Lambda(lambda x: tf.linalg.matmul(x[0], x[1], transpose_a = True))([samples, cluster_index_onehot]); # cluster_sum.shape = (dim, n_embed)
@@ -37,6 +38,9 @@ class Quantize(tf.keras.layers.Layer):
       cluster_size = tf.keras.layers.Lambda(lambda x, e, n: (x[0] + e) * x[1] / (x[1] + n * e), arguments = {'e': self.eps, 'n': self.n_embed})([self.cluster_size, n_sample]); # cluster_size.shape = (n_embed)
       cluster_mean = tf.keras.layers.Lambda(lambda x: x[0] / x[1])([self.cluster_sum, self.cluster_size]); # cluster_mean.shape = (dim, n_embed)
       self.cluster_mean.assign(cluster_mean);
+    quantize = tf.keras.layers.Lambda(lambda x: tf.reshape(x[0], (*tf.shape(x[1])[:-1], tf.shape(x)[-1])))([quantize, inputs]); # quantize.shape = (batch, h, w, dim)
+    cluster_index = tf.keras.layers.Lambda(lambda x: tf.reshape(x[0], (*tf.shape(x[1])[:-1])))([cluster_index, inputs]); # cluster_index.shape = (batch, h, w)
+    diff = tf.keras.layers.Lambda(lambda x: tf.reshape(x[0], (*tf.shape(x[1])[:-1])))([diff, inputs]); # diff.shape = (batch, h, w)
     return quantize, cluster_index, diff;
   def get_config(self):
     config = super(Quantize, self).get_config();
@@ -51,32 +55,70 @@ class Quantize(tf.keras.layers.Layer):
     self.decay = config['decay'];
     self.eps = config['eps'];
     return cls(**config);
-    
 
-def Encoder(img_channels = 3, hidden_channels = 128, vocab_size = 10000):
-  inputs = tf.keras.Input((None, None, img_channels));
-  results = tf.keras.layers.Conv2D(hidden_channels, (4,4), strides = (2,2), padding = 'same')(inputs);
-  results = tf.keras.layers.BatchNormalization()(results);
+def Encoder(in_channels = 3, out_channels = 128, block_num = 2, res_channels = 32, stride = 4):
+  assert stride in [2, 4];
+  inputs = tf.keras.Input((None, None, in_channels)); # inputs.shape = (batch, height, width, in_channels)
+  if stride == 4:
+    results = tf.keras.layers.Conv2D(out_channels // 2, (4,4), strides = (2,2), padding = 'same')(inputs);
+    results = tf.keras.layers.ReLU()(results);
+    results = tf.keras.layers.Conv2D(out_channels, (4,4), strides = (2,2), padding = 'same')(results);
+    results = tf.keras.layers.ReLU()(results);
+    results = tf.keras.layers.Conv2D(out_channels, (3,3), padding = 'same')(results);
+  elif stride == 2:
+    results = tf.keras.layers.Conv2D(out_channels // 2, (4,4), strides = (2,2), padding = 'same')(inputs);
+    results = tf.keras.layers.ReLU()(results);
+    results = tf.keras.layers.Conv2D(out_channels, (3,3), padding = 'same')(results);
+  else:
+    raise Exception('invalid stride option');
+  for i in range(block_num):
+    short = results;
+    results = tf.keras.layers.ReLU()(results);
+    results = tf.keras.layers.Conv2D(res_channels, (3,3), padding = 'same')(results);
+    results = tf.keras.layers.ReLU()(results);
+    results = tf.keras.layers.Conv2D(out_channels, (1,1), padding = 'same')(results);
+    results = tf.keras.layers.Add()([results, short]);
   results = tf.keras.layers.ReLU()(results);
-  results = tf.keras.layers.Conv2D(hidden_channels, (4,4), strides = (2,2), padding = 'same')(results);
-  results = tf.keras.layers.BatchNormalization()(results);
-  results = tf.keras.layers.ReLU()(results);
-  results = tf.keras.layers.Conv2D(vocab_size, (1,1), padding = 'same')(results);
-  tokens = tf.keras.layers.Lambda(lambda x: tf.math.argmax(x, axis = -1))(results);
-  return tf.keras.Model(inputs = inputs, outputs = tokens);
+  return tf.keras.Model(inputs = inputs, outputs = results);
 
-def Decoder(img_channels = 3, hidden_channels = 128, vocab_size = 10000):
-  tokens = tf.keras.Input((None, None, 1), dtype = tf.int32); # inputs.shape = (batch, 16, 16, 1)
-  results = tf.keras.layers.Lambda(lambda x, v: tf.one_hot(tf.squeeze(x, -1), v), arguments = {'v': vocab_size})(tokens);
-  cluster_meandings = tf.keras.layers.Conv2D(hidden_channels, (1,1), padding = 'same')(results); # cluster_meandings.shape = (batch, 16, 16, hidden_channels)
-  results = tf.keras.layers.Conv2DTranspose(hidden_channels, (4,4), strides = (2,2), padding = 'same')(cluster_meandings);
-  results = tf.keras.layers.BatchNormalization()(results);
+def Decoder(in_channels, out_channels, hidden_channels, block_num, res_channels = 32, strides = 4):
+  assert stride in [2, 4];
+  inputs = tf.keras.Input((None, None, in_channels)); # inputs.shape = (batch, height, width, in_channels)
+  results = tf.keras.layers.Conv2D(hidden_channels, (3,3), padding = 'same')(inputs);
+  for i in range(block_num):
+    short = results;
+    results = tf.keras.layers.ReLU()(results);
+    results = tf.keras.layers.Conv2D(res_channels, (3,3), padding = 'same')(results);
+    results = tf.keras.layers.ReLU()(results);
+    results = tf.keras.layers.Conv2D(hidden_channels, (1,1), padding = 'same')(results);
+    results = tf.keras.layers.Add()([results, short]);
   results = tf.keras.layers.ReLU()(results);
-  results = tf.keras.layers.Conv2DTranspose(hidden_channels, (4,4), strides = (2,2), padding = 'same')(results);
-  results = tf.keras.layers.BatchNormalization()(results);
-  results = tf.keras.layers.ReLU()(results);
-  results = tf.keras.layers.Conv2D(img_channels, (1,1), padding = 'same')(results);
-  return tf.keras.Model(inputs = tokens, outputs = results);
+  if strides == 4:
+    results = tf.keras.layers.Conv2DTranspose(hidden_channels // 2, (4,4), strides = (2,2), padding = 'same')(results);
+    results = tf.keras.layers.ReLU()(results);
+    results = tf.keras.layers.Conv2DTranspose(out_channels, (4,4), strides = (2,2), padding = 'same')(results);
+  elif strides == 2:
+    results = tf.keras.layers.Conv2DTranspose(out_channels, (4,4), strides = (2,2), padding = 'same')(results);
+  else:
+    raise Exception('invalid stride option');
+  return tf.keras.Model(inputs = inputs, outputs = results);
+
+def VQVAE_Encoder(in_channels = 3, hidden_channels = 128, block_num = 2, res_channels = 32, embed_dim = 64, n_embed = 512):
+  inputs = tf.keras.Input((None, None, in_channels));
+  enc_b = Encoder(in_channels, hidden_channels, block_num, res_channels, 4)(inputs); # enc_b.shape = (batch, h/4, w/4, hidden_channels)
+  enc_t = Encoder(hidden_channels, hidden_channels, block_num, res_channels, 2)(enc_b); # enc_t.shape = (batch, h/8, w/8, hidden_channels)
+  results = tf.keras.layers.Conv2D(embed_dim, (1,1))(enc_t); # results.shape = (batch, h/8, w/8, embed_dim)
+  quantized_t, cluster_index_t, diff_t = Quantize(embed_dim, n_embed)(results); # quantized_t.shape = (batch, h/8, w/8, embed_dim)
+  dec_t = Decoder(embed_dim, embed_dim, hidden_channels, block_num, res_channels, 2)(quantized_t); # dec_t.shape = (batch, h/4, w/4, embed_dim)
+  enc_b = tf.keras.layers.Concatenate(axis = -1)([dec_t, enc_b]); # enc_b.shape = (bath, h/4, w/4, embed_dim + hidden_channels)
+  results = tf.keras.layers.Conv2D(embed_dim, (1,1))(enc_b); # results.shape = (batch, h/4, w/4, embed_dim)
+  quantized_b, cluster_index_b, diff_b = Quantize(embed_dim, n_embed)(results); # quantized_b.shape = (batch, h/4, w/4, embed_dim)
+  return tf.keras.Model(inputs = inputs, outputs = (quantized_t, cluster_index_t, diff_t, quantized_b, cluster_index_b, diff_b));
+
+def VQVAE_Decoder(embed_dim = 64):
+  quantized_t = tf.keras.Input((None, None, embed_dim));
+  quantized_b = tf.keras.Input((None, None, embed_dim));
+  
 
 def MultiHeadAttention(d_model = 1024, length = 35, height = 16, width = 16, num_heads = 8):
   # 1) inputs
