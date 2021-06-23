@@ -3,11 +3,12 @@
 import tensorflow as tf;
 
 class Quantize(tf.keras.layers.Layer):
-  def __init__(self, embed_dim = 128, n_embed = 10000, decay = 0.99, eps = 1e-5, **kwargs):
+  def __init__(self, embed_dim = 128, n_embed = 10000, decay = 0.99, eps = 1e-5, enable_train = False, **kwargs):
     self.embed_dim = embed_dim;
     self.n_embed = n_embed;
     self.decay = decay;
     self.eps = eps;
+    self.enable_train = enable_train;
     super(Quantize, self).__init__(**kwargs);
   def build(self, input_shape):
     # NOTE: all this weights are not trainable, because they are managed manually
@@ -24,7 +25,7 @@ class Quantize(tf.keras.layers.Layer):
     dist = tf.keras.layers.Lambda(lambda x: tf.math.reduce_sum(tf.math.pow(x[0],2), axis = 1, keepdims = True) - 2 * tf.linalg.matmul(x[0], x[1]) + tf.math.reduce_sum(tf.math.pow(x[1],2), axis = 0, keepdims = True))([samples, self.cluster_mean]);
     cluster_index = tf.keras.layers.Lambda(lambda x: tf.math.argmax(x, axis = 1))(dist); # cluster_index.shape = (n_sample)
     quantize = tf.keras.layers.Lambda(lambda x: tf.nn.embedding_lookup(tf.transpose(x[0]), x[1]))([self.cluster_mean, cluster_index]); # quantize.shape = (n_sample, dim)
-    if tf.keras.backend.learning_phase() == 1:
+    if tf.keras.backend.learning_phase() == 1 and self.enable_train:
       # NOTE: code book is updated during forward propagation
       cluster_index_onehot = tf.keras.layers.Lambda(lambda x, n: tf.one_hot(x, n), arguments = {'n': self.n_embed})(cluster_index); # cluster_index_onehot.shape = (n_sample, n_embed)
       cluster_size = tf.keras.layers.Lambda(lambda x: tf.math.reduce_sum(x, axis = 0))(cluster_index_onehot); # cluster_size.shape = (n_embed)
@@ -47,6 +48,7 @@ class Quantize(tf.keras.layers.Layer):
     config['n_embed'] = self.n_embed;
     config['decay'] = self.decay;
     config['eps'] = self.eps;
+    config['enable_train'] = self.enable_train;
     return config;
   @classmethod
   def from_config(cls, config):
@@ -54,6 +56,7 @@ class Quantize(tf.keras.layers.Layer):
     self.n_embed = config['n_embed'];
     self.decay = config['decay'];
     self.eps = config['eps'];
+    self.enable_train = config['enable_train'];
     return cls(**config);
 
 def Encoder(in_channels = 3, out_channels = 128, block_num = 2, res_channels = 32, stride = 4, name = 'encoder'):
@@ -103,16 +106,16 @@ def Decoder(in_channels, out_channels, hidden_channels, block_num, res_channels 
     raise Exception('invalid stride option');
   return tf.keras.Model(inputs = inputs, outputs = results, name = name);
 
-def VQVAE_Encoder(in_channels = 3, hidden_channels = 128, block_num = 2, res_channels = 32, embed_dim = 64, n_embed = 512):
+def VQVAE_Encoder(in_channels = 3, hidden_channels = 128, block_num = 2, res_channels = 32, embed_dim = 64, n_embed = 512, train_quantize = False):
   inputs = tf.keras.Input((None, None, in_channels));
   enc_b = Encoder(in_channels, hidden_channels, block_num, res_channels, 4, name = 'bottom_encoder')(inputs); # enc_b.shape = (batch, h/4, w/4, hidden_channels)
   enc_t = Encoder(hidden_channels, hidden_channels, block_num, res_channels, 2, name = 'top_encoder')(enc_b); # enc_t.shape = (batch, h/8, w/8, hidden_channels)
   results = tf.keras.layers.Conv2D(embed_dim, (1,1))(enc_t); # results.shape = (batch, h/8, w/8, embed_dim)
-  quantized_t, cluster_index_t, diff_t = Quantize(embed_dim, n_embed, name = 'top_quantize')(results); # quantized_t.shape = (batch, h/8, w/8, embed_dim)
+  quantized_t, cluster_index_t, diff_t = Quantize(embed_dim, n_embed, enable_train = train_quantize, name = 'top_quantize')(results); # quantized_t.shape = (batch, h/8, w/8, embed_dim)
   dec_t = Decoder(embed_dim, embed_dim, hidden_channels, block_num, res_channels, 2)(quantized_t); # dec_t.shape = (batch, h/4, w/4, embed_dim)
   enc_b = tf.keras.layers.Concatenate(axis = -1)([dec_t, enc_b]); # enc_b.shape = (bath, h/4, w/4, embed_dim + hidden_channels)
   results = tf.keras.layers.Conv2D(embed_dim, (1,1))(enc_b); # results.shape = (batch, h/4, w/4, embed_dim)
-  quantized_b, cluster_index_b, diff_b = Quantize(embed_dim, n_embed, name = 'bottom_quantize')(results); # quantized_b.shape = (batch, h/4, w/4, embed_dim)
+  quantized_b, cluster_index_b, diff_b = Quantize(embed_dim, n_embed, enable_train = train_quantize, name = 'bottom_quantize')(results); # quantized_b.shape = (batch, h/4, w/4, embed_dim)
   return tf.keras.Model(inputs = inputs, outputs = (quantized_t, cluster_index_t, diff_t, quantized_b, cluster_index_b, diff_b));
 
 def VQVAE_Decoder(in_channels = 3, hidden_channels = 128, block_num = 2, res_channels = 32, embed_dim = 64):
@@ -126,7 +129,7 @@ def VQVAE_Decoder(in_channels = 3, hidden_channels = 128, block_num = 2, res_cha
 if __name__ == "__main__":
   import numpy as np;
   tf.keras.backend.set_learning_phase(1);
-  encoder = VQVAE_Encoder();
+  encoder = VQVAE_Encoder(train_quantize = False);
   decoder = VQVAE_Decoder();
   encoder.save('encoder.h5');
   decoder.save('decoder.h5');
