@@ -115,10 +115,13 @@ def VQVAE_Encoder(in_channels = 3, hidden_channels = 128, block_num = 2, res_cha
   quantized_b, cluster_index_b, diff_b = Quantize(embed_dim, n_embed)(results); # quantized_b.shape = (batch, h/4, w/4, embed_dim)
   return tf.keras.Model(inputs = inputs, outputs = (quantized_t, cluster_index_t, diff_t, quantized_b, cluster_index_b, diff_b));
 
-def VQVAE_Decoder(embed_dim = 64):
-  quantized_t = tf.keras.Input((None, None, embed_dim));
-  quantized_b = tf.keras.Input((None, None, embed_dim));
-  
+def VQVAE_Decoder(in_channels = 3, hidden_channels = 128, block_num = 2, res_channels = 32, embed_dim = 64):
+  quantized_t = tf.keras.Input((None, None, embed_dim)); # quantized_t.shape = (batch, h/8, w/8, embed_dim)
+  quantized_b = tf.keras.Input((None, None, embed_dim)); # quantized_b.shape = (batch, h/4, w/4, embed_dim)
+  results = tf.keras.layers.Conv2DTranspose(embed_dim, (4,4), strides = (2,2), padding = 'same')(quantized_t); # results.shape = (batch, h/4, w/4, embed_dim)
+  results = tf.keras.layers.Concatenate(axis = -1)([results, quantized_b]); # results.shape = (batch, h/4, w/4, 2 * embed_dim)
+  results = Decoder(2 * embed_dim, in_channels, hidden_channels, block_num, res_channels, 4)(results); # results.shape = (batch, h, w, 3)
+  return tf.keras.Model(inputs = (quantized_t, quantized_b), outputs = results);
 
 def MultiHeadAttention(d_model = 1024, length = 35, height = 16, width = 16, num_heads = 8):
   # 1) inputs
