@@ -19,12 +19,11 @@ class Quantize(tf.keras.layers.Layer):
     self.cluster_sum = self.add_weight(shape = (self.embed_dim, self.n_embed), dtype = tf.float32, initializer = tf.keras.initializers.RandomNormal(stddev = 1.), trainable = False, name = 'cluster_sum');
     self.cluster_sum.assign(self.cluster_mean);
   def call(self, inputs):
-    samples = tf.keras.layers.Reshape((self.embed_dim,))(inputs); # samples.shape = (n_sample, dim)
+    samples = tf.keras.layers.Lambda(lambda x: tf.reshape(x, (-1, self.embed_dim,)))(inputs); # samples.shape = (n_sample, dim)
     # dist = (X - cluster_mean)^2 = X' * X - 2 * X' * Embed + trace(Embed' * Embed),  dist.shape = (n_sample, n_embed), euler distances to cluster_meanding vectors
     dist = tf.keras.layers.Lambda(lambda x: tf.math.reduce_sum(tf.math.pow(x[0],2), axis = 1, keepdims = True) - 2 * tf.linalg.matmul(x[0], x[1]) + tf.math.reduce_sum(tf.math.pow(x[1],2), axis = 0, keepdims = True))([samples, self.cluster_mean]);
     cluster_index = tf.keras.layers.Lambda(lambda x: tf.math.argmax(x, axis = 1))(dist); # cluster_index.shape = (n_sample)
     quantize = tf.keras.layers.Lambda(lambda x: tf.nn.embedding_lookup(tf.transpose(x[0]), x[1]))([self.cluster_mean, cluster_index]); # quantize.shape = (n_sample, dim)
-    diff = tf.keras.layers.Lambda(lambda x: tf.math.reduce_mean(tf.math.pow(x[0] - x[1], 2), axis = -1))([inputs, quantize]); # diff.shape = (n_sample,)
     if tf.keras.backend.learning_phase() == 1:
       # NOTE: code book is updated during forward propagation
       cluster_index_onehot = tf.keras.layers.Lambda(lambda x, n: tf.one_hot(x, n), arguments = {'n': self.n_embed})(cluster_index); # cluster_index_onehot.shape = (n_sample, n_embed)
@@ -40,7 +39,7 @@ class Quantize(tf.keras.layers.Layer):
       self.cluster_mean.assign(cluster_mean);
     quantize = tf.keras.layers.Lambda(lambda x: tf.reshape(x[0], (tf.shape(x[1])[0], tf.shape(x[1])[1], tf.shape(x[1])[2], tf.shape(x[0])[-1])))([quantize, inputs]); # quantize.shape = (batch, h, w, dim)
     cluster_index = tf.keras.layers.Lambda(lambda x: tf.reshape(x[0], (tf.shape(x[1])[0], tf.shape(x[1])[1], tf.shape(x[1])[2],)))([cluster_index, inputs]); # cluster_index.shape = (batch, h, w)
-    diff = tf.keras.layers.Lambda(lambda x: tf.reshape(x[0], (tf.shape(x[1])[0], tf.shape(x[1])[1], tf.shape(x[1])[2],)))([diff, inputs]); # diff.shape = (batch, h, w)
+    diff = tf.keras.layers.Lambda(lambda x: tf.math.reduce_mean(tf.math.pow(x[0] - x[1], 2), axis = -1))([inputs, quantize]); # diff.shape = (n_sample,)
     return quantize, cluster_index, diff;
   def get_config(self):
     config = super(Quantize, self).get_config();
@@ -126,7 +125,14 @@ def VQVAE_Decoder(in_channels = 3, hidden_channels = 128, block_num = 2, res_cha
 
 if __name__ == "__main__":
   import numpy as np;
+  tf.keras.backend.set_learning_phase(1);
   encoder = VQVAE_Encoder();
   decoder = VQVAE_Decoder();
   encoder.save('encoder.h5');
   decoder.save('decoder.h5');
+  inputs = np.random.normal(size = (4,256,256,3));
+  quantized_t, cluster_index_t, diff_t, quantized_b, cluster_index_b, diff_b = encoder(inputs);
+  print(quantized_t.shape, cluster_index_t.shape, diff_t.shape);
+  print(quantized_b.shape, cluster_index_b.shape, diff_b.shape);
+  results = decoder([quantized_t, quantized_b]);
+  print(results.shape);
