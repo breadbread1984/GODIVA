@@ -40,7 +40,7 @@ class Quantize(tf.keras.layers.Layer):
       self.cluster_mean.assign(cluster_mean);
     quantize = tf.keras.layers.Lambda(lambda x: tf.reshape(x[0], (tf.shape(x[1])[0], tf.shape(x[1])[1], tf.shape(x[1])[2], tf.shape(x[0])[-1])))([quantize, inputs]); # quantize.shape = (batch, h, w, dim)
     cluster_index = tf.keras.layers.Lambda(lambda x: tf.reshape(x[0], (tf.shape(x[1])[0], tf.shape(x[1])[1], tf.shape(x[1])[2],)))([cluster_index, inputs]); # cluster_index.shape = (batch, h, w)
-    diff = tf.keras.layers.Lambda(lambda x: tf.math.reduce_mean(tf.math.pow(x[0] - x[1], 2), axis = -1))([inputs, quantize]); # diff.shape = (n_sample,)
+    diff = tf.keras.layers.Lambda(lambda x: tf.math.reduce_mean(tf.math.pow(x[0] - x[1], 2)))([inputs, quantize]); # diff.shape = (n_sample,)
     return quantize, cluster_index, diff;
   def get_config(self):
     config = super(Quantize, self).get_config();
@@ -125,6 +125,17 @@ def VQVAE_Decoder(in_channels = 3, hidden_channels = 128, block_num = 2, res_cha
   results = tf.keras.layers.Concatenate(axis = -1)([results, quantized_b]); # results.shape = (batch, h/4, w/4, 2 * embed_dim)
   results = Decoder(2 * embed_dim, in_channels, hidden_channels, block_num, res_channels, 4)(results); # results.shape = (batch, h, w, 3)
   return tf.keras.Model(inputs = (quantized_t, quantized_b), outputs = results);
+
+class VQVAE_Trainer(tf.keras.Model):
+  def __init__(self, in_channels = 3, hidden_channels = 128, block_num = 2, res_channels = 32, embed_dim = 64, n_embed = 512):
+    super(VQVAE_Trainer, self).__init__();
+    self.encoder = VQVAE_Encoder(in_channels, hidden_channels, block_num, res_channels, embed_dim, n_embed, True);
+    self.decoder = VQVAE_Decoder(in_channels, hidden_channels, block_num, res_channels, embed_dim);
+  def call(self, inputs):
+    quantized_t, cluster_index_t, diff_t, quantized_b, cluster_index_b, diff_b = self.encoder(inputs);
+    recon = self.decoder([quantized_t, quantized_b]);
+    diff = tf.keras.layers.Add()([diff_t, diff_b]);
+    return recon, diff;
 
 if __name__ == "__main__":
   import numpy as np;
