@@ -3,9 +3,9 @@
 import tensorflow as tf;
 
 class Quantize(tf.keras.layers.Layer):
-  def __init__(self, dim, n_cluster_mean, decay = 0.99, eps = 1e-5, **kwargs):
+  def __init__(self, dim, n_embed, decay = 0.99, eps = 1e-5, **kwargs):
     self.dim = dim;
-    self.n_cluster_mean = n_cluster_mean;
+    self.n_embed = n_embed;
     self.decay = decay;
     self.eps = eps;
     super(Quantize, self).__init__(**kwargs);
@@ -14,40 +14,40 @@ class Quantize(tf.keras.layers.Layer):
     # cluster_mean: cluster_meanding code book
     # cluster_size: how many samples falling in each cluster
     # cluster_sum: the respective sum of samples falling in each cluster
-    self.cluster_mean = self.add_weight(shape = (self.dim, self.n_cluster_mean,), dtype = tf.float32, initializer = tf.keras.initializers.RandomNormal(stddev = 1.), trainable = False, name = 'cluster_mean');
-    self.cluster_size = self.add_weight(shape = (self.n_cluster_mean,), dtype = tf.float32, initializer = tf.keras.initializers.Zeros(), trainable = False, name = 'cluster_size');
-    self.cluster_sum = self.add_weight(shape = (self.dim, self.n_cluster_mean), dtype = tf.float32, initializer = tf.keras.initializers.RandomNormal(stddev = 1.), trainable = False, name = 'cluster_mean');
+    self.cluster_mean = self.add_weight(shape = (self.dim, self.n_embed), dtype = tf.float32, initializer = tf.keras.initializers.RandomNormal(stddev = 1.), trainable = False, name = 'cluster_mean');
+    self.cluster_size = self.add_weight(shape = (self.n_embed,), dtype = tf.float32, initializer = tf.keras.initializers.Zeros(), trainable = False, name = 'cluster_size');
+    self.cluster_sum = self.add_weight(shape = (self.dim, self.n_embed), dtype = tf.float32, initializer = tf.keras.initializers.RandomNormal(stddev = 1.), trainable = False, name = 'cluster_mean');
     self.cluster_sum.assign(self.cluster_mean);
   def call(self, inputs):
     samples = tf.keras.layers.Reshape((self.dim,))(inputs); # samples.shape = (n_sample, dim)
-    # dist = (X - cluster_mean)^2 = X' * X - 2 * X' * Embed + trace(Embed' * Embed),  dist.shape = (n_sample, n_cluster_mean), euler distances to cluster_meanding vectors
+    # dist = (X - cluster_mean)^2 = X' * X - 2 * X' * Embed + trace(Embed' * Embed),  dist.shape = (n_sample, n_embed), euler distances to cluster_meanding vectors
     dist = tf.keras.layers.Lambda(lambda x: tf.math.reduce_sum(tf.math.pow(x[0],2), axis = 1, keepdims = True) - 2 * tf.linalg.matmul(x[0], x[1]) + tf.math.reduce_sum(tf.math.pow(x[1],2), axis = 0, keepdims = True))([samples, self.cluster_mean]);
     cluster_index = tf.keras.layers.Lambda(lambda x: tf.math.argmax(x, axis = 1))(dist); # cluster_index.shape = (n_sample)
     quantize = tf.keras.layers.Lambda(lambda x: tf.nn.embedding_lookup(tf.transpose(x[0]), x[1]))([self.cluster_mean, cluster_index]); # quantize.shape = (n_sample, dim)
     diff = tf.keras.layers.Lambda(lambda x: tf.math.reduce_mean(tf.math.pow(x[0] - x[1], 2), axis = -1))([inputs, quantize]); # diff.shape = (n_sample,)
     if tf.keras.backend.learning_phase() == 1:
-      cluster_index_onehot = tf.keras.layers.Lambda(lambda x, n: tf.one_hot(x, n), arguments = {'n': n_cluster_mean})(cluster_index); # cluster_index_onehot.shape = (n_sample, n_cluster_mean)
-      cluster_size = tf.keras.layers.Lambda(lambda x: tf.math.reduce_sum(x, axis = 0))(cluster_index_onehot); # cluster_size.shape = (n_cluster_mean)
-      cluster_sum = tf.keras.layers.Lambda(lambda x: tf.linalg.matmul(x[0], x[1], transpose_a = True))([samples, cluster_index_onehot]); # cluster_sum.shape = (dim, n_cluster_mean)
-      updated_cluster_size = tf.keras.layers.Lambda(lambda x, d: x[0] * d + x[1] * (1 - d), arguments = {'d': decay})([self.cluster_size, cluster_size]); # updated_cluster_size.shape = (n_cluster_mean)
-      updated_cluster_sum = tf.keras.layers.Lambda(lambda x, d: x[0] * d + x[1] * (1 - d), arguments = {'d': decay})([self.cluster_sum, cluster_sum]); # updated_cluster_sum.shape = (dim, n_cluster_mean)
+      cluster_index_onehot = tf.keras.layers.Lambda(lambda x, n: tf.one_hot(x, n), arguments = {'n': self.n_embed})(cluster_index); # cluster_index_onehot.shape = (n_sample, n_embed)
+      cluster_size = tf.keras.layers.Lambda(lambda x: tf.math.reduce_sum(x, axis = 0))(cluster_index_onehot); # cluster_size.shape = (n_embed)
+      cluster_sum = tf.keras.layers.Lambda(lambda x: tf.linalg.matmul(x[0], x[1], transpose_a = True))([samples, cluster_index_onehot]); # cluster_sum.shape = (dim, n_embed)
+      updated_cluster_size = tf.keras.layers.Lambda(lambda x, d: x[0] * d + x[1] * (1 - d), arguments = {'d': self.decay})([self.cluster_size, cluster_size]); # updated_cluster_size.shape = (n_embed)
+      updated_cluster_sum = tf.keras.layers.Lambda(lambda x, d: x[0] * d + x[1] * (1 - d), arguments = {'d': self.decay})([self.cluster_sum, cluster_sum]); # updated_cluster_sum.shape = (dim, n_embed)
       self.cluster_size.assign(updated_cluster_size);
       self.cluster_sum.assign(updated_cluster_sum);
       n_sample = tf.keras.layers.Lambda(lambda x: tf.math.reduce_sum(x))(self.cluster_size); # n_sample.shape = ()
-      cluster_size = tf.keras.layers.Lambda(lambda x, e, n: (x[0] + e) * x[1] / (x[1] + n * e), arguments = {'e': self.eps, 'n': self.n_cluster_mean})([self.cluster_size, n_sample]); # cluster_size.shape = (n_cluster_mean)
-      cluster_mean = tf.keras.layers.Lambda(lambda x: x[0] / x[1])([self.cluster_sum, self.cluster_size]); # cluster_mean.shape = (dim, n_cluster_mean)
+      cluster_size = tf.keras.layers.Lambda(lambda x, e, n: (x[0] + e) * x[1] / (x[1] + n * e), arguments = {'e': self.eps, 'n': self.n_embed})([self.cluster_size, n_sample]); # cluster_size.shape = (n_embed)
+      cluster_mean = tf.keras.layers.Lambda(lambda x: x[0] / x[1])([self.cluster_sum, self.cluster_size]); # cluster_mean.shape = (dim, n_embed)
       self.cluster_mean.assign(cluster_mean);
     return quantize, cluster_index, diff;
   def get_config(self):
     config = super(Quantize, self).get_config();
     config['dim'] = self.dim;
-    config['n_cluster_mean'] = self.n_cluster_mean;
+    config['n_embed'] = self.n_embed;
     config['decay'] = self.decay;
     config['eps'] = self.eps;
   @classmethod
   def from_config(cls, config):
     self.dim = config['dim'];
-    self.n_cluster_mean = config['n_cluster_mean'];
+    self.n_embed = config['n_embed'];
     self.decay = config['decay'];
     self.eps = config['eps'];
     return cls(**config);
@@ -137,4 +137,5 @@ if __name__ == "__main__":
   decoder.save('decoder.h5');
   q = Quantize(10,5);
   inputs = np.random.normal(size = (4,10));
+  tf.keras.backend.set_learning_phase(1);
   outputs = q(inputs);
