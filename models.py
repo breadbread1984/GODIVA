@@ -16,7 +16,7 @@ class Quantize(tf.keras.layers.Layer):
     # cluster_sum: the respective sum of samples falling in each cluster
     self.cluster_mean = self.add_weight(shape = (self.embed_dim, self.n_embed), dtype = tf.float32, initializer = tf.keras.initializers.RandomNormal(stddev = 1.), trainable = False, name = 'cluster_mean');
     self.cluster_size = self.add_weight(shape = (self.n_embed,), dtype = tf.float32, initializer = tf.keras.initializers.Zeros(), trainable = False, name = 'cluster_size');
-    self.cluster_sum = self.add_weight(shape = (self.embed_dim, self.n_embed), dtype = tf.float32, initializer = tf.keras.initializers.RandomNormal(stddev = 1.), trainable = False, name = 'cluster_mean');
+    self.cluster_sum = self.add_weight(shape = (self.embed_dim, self.n_embed), dtype = tf.float32, initializer = tf.keras.initializers.RandomNormal(stddev = 1.), trainable = False, name = 'cluster_sum');
     self.cluster_sum.assign(self.cluster_mean);
   def call(self, inputs):
     samples = tf.keras.layers.Reshape((self.embed_dim,))(inputs); # samples.shape = (n_sample, dim)
@@ -57,7 +57,7 @@ class Quantize(tf.keras.layers.Layer):
     self.eps = config['eps'];
     return cls(**config);
 
-def Encoder(in_channels = 3, out_channels = 128, block_num = 2, res_channels = 32, stride = 4):
+def Encoder(in_channels = 3, out_channels = 128, block_num = 2, res_channels = 32, stride = 4, name = 'encoder'):
   assert stride in [2, 4];
   inputs = tf.keras.Input((None, None, in_channels)); # inputs.shape = (batch, height, width, in_channels)
   if stride == 4:
@@ -80,9 +80,9 @@ def Encoder(in_channels = 3, out_channels = 128, block_num = 2, res_channels = 3
     results = tf.keras.layers.Conv2D(out_channels, (1,1), padding = 'same')(results);
     results = tf.keras.layers.Add()([results, short]);
   results = tf.keras.layers.ReLU()(results);
-  return tf.keras.Model(inputs = inputs, outputs = results);
+  return tf.keras.Model(inputs = inputs, outputs = results, name = name);
 
-def Decoder(in_channels, out_channels, hidden_channels, block_num, res_channels = 32, strides = 4):
+def Decoder(in_channels, out_channels, hidden_channels, block_num, res_channels = 32, strides = 4, name = 'decoder'):
   assert strides in [2, 4];
   inputs = tf.keras.Input((None, None, in_channels)); # inputs.shape = (batch, height, width, in_channels)
   results = tf.keras.layers.Conv2D(hidden_channels, (3,3), padding = 'same')(inputs);
@@ -102,18 +102,18 @@ def Decoder(in_channels, out_channels, hidden_channels, block_num, res_channels 
     results = tf.keras.layers.Conv2DTranspose(out_channels, (4,4), strides = (2,2), padding = 'same')(results);
   else:
     raise Exception('invalid stride option');
-  return tf.keras.Model(inputs = inputs, outputs = results);
+  return tf.keras.Model(inputs = inputs, outputs = results, name = name);
 
 def VQVAE_Encoder(in_channels = 3, hidden_channels = 128, block_num = 2, res_channels = 32, embed_dim = 64, n_embed = 512):
   inputs = tf.keras.Input((None, None, in_channels));
-  enc_b = Encoder(in_channels, hidden_channels, block_num, res_channels, 4)(inputs); # enc_b.shape = (batch, h/4, w/4, hidden_channels)
-  enc_t = Encoder(hidden_channels, hidden_channels, block_num, res_channels, 2)(enc_b); # enc_t.shape = (batch, h/8, w/8, hidden_channels)
+  enc_b = Encoder(in_channels, hidden_channels, block_num, res_channels, 4, name = 'bottom_encoder')(inputs); # enc_b.shape = (batch, h/4, w/4, hidden_channels)
+  enc_t = Encoder(hidden_channels, hidden_channels, block_num, res_channels, 2, name = 'top_encoder')(enc_b); # enc_t.shape = (batch, h/8, w/8, hidden_channels)
   results = tf.keras.layers.Conv2D(embed_dim, (1,1))(enc_t); # results.shape = (batch, h/8, w/8, embed_dim)
-  quantized_t, cluster_index_t, diff_t = Quantize(embed_dim, n_embed)(results); # quantized_t.shape = (batch, h/8, w/8, embed_dim)
+  quantized_t, cluster_index_t, diff_t = Quantize(embed_dim, n_embed, name = 'top_quantize')(results); # quantized_t.shape = (batch, h/8, w/8, embed_dim)
   dec_t = Decoder(embed_dim, embed_dim, hidden_channels, block_num, res_channels, 2)(quantized_t); # dec_t.shape = (batch, h/4, w/4, embed_dim)
   enc_b = tf.keras.layers.Concatenate(axis = -1)([dec_t, enc_b]); # enc_b.shape = (bath, h/4, w/4, embed_dim + hidden_channels)
   results = tf.keras.layers.Conv2D(embed_dim, (1,1))(enc_b); # results.shape = (batch, h/4, w/4, embed_dim)
-  quantized_b, cluster_index_b, diff_b = Quantize(embed_dim, n_embed)(results); # quantized_b.shape = (batch, h/4, w/4, embed_dim)
+  quantized_b, cluster_index_b, diff_b = Quantize(embed_dim, n_embed, name = 'bottom_quantize')(results); # quantized_b.shape = (batch, h/4, w/4, embed_dim)
   return tf.keras.Model(inputs = inputs, outputs = (quantized_t, cluster_index_t, diff_t, quantized_b, cluster_index_b, diff_b));
 
 def VQVAE_Decoder(in_channels = 3, hidden_channels = 128, block_num = 2, res_channels = 32, embed_dim = 64):
