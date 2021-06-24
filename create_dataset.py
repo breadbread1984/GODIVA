@@ -10,9 +10,9 @@ def parse_function_generator(output_size=(256, 256)):
     feature = tf.io.parse_single_example(
       serialized_example,
       features={
-        'image/encoded': tf.FixedLenFeature((), dtype=tf.string, default_value=''),
-        'image/class/label': tf.FixedLenFeature((), dtype=tf.int64, default_value=-1),
-        'image/class/text': tf.FixedLenFeature((), dtype=tf.string, default_value='')
+        'image/encoded': tf.io.FixedLenFeature((), dtype=tf.string, default_value=''),
+        'image/class/label': tf.io.FixedLenFeature((), dtype=tf.int64, default_value=-1),
+        'image/class/text': tf.io.FixedLenFeature((), dtype=tf.string, default_value='')
       }
     );
     image = tf.io.decode_jpeg(feature['image/encoded']);
