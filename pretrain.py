@@ -29,7 +29,7 @@ def main(train_dir, test_dir):
     def on_batch_end(self, batch, logs = None):
       image, label_dict = next(self.iter);
       recon, diff = trainer(image); # recon.shape = (batch, 256, 256, 3)
-      recon_loss = tf.keras.losses.MeanSquaredError(image, recon);
+      recon_loss = tf.keras.losses.MeanSquaredError()(image, recon);
       self.recon_loss.update_state(recon_loss);
       self.quant_loss.update_state(diff);
       if batch % self.eval_freq == 0:
