@@ -13,7 +13,7 @@ def main(train_dir, test_dir):
   if exists('./checkpoints/chkpt'): trainer.load_weights('./checkpoints/ckpt/variables/variables');
   optimizer = tf.keras.optimizers.Adam(3e-4);
   trainer.compile(optimizer = optimizer,
-                  loss = {'output_1': lambda labels, outputs: tf.keras.losses.MeanSquaredError(labels, outputs),
+                  loss = {'output_1': lambda labels, outputs: tf.keras.losses.MeanSquaredError()(labels, outputs),
                           'output_2': lambda dummy, outputs: outputs},
                   loss_weights = {'output_1': 1,'output_2': 0.25});
   class SummaryCallback(tf.keras.callbacks.Callback):
