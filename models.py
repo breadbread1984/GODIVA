@@ -138,6 +138,12 @@ class VQVAE_Trainer(tf.keras.Model):
     recon = self.decoder([quantized_t, quantized_b]);
     diff = tf.keras.layers.Add(name = 'diff')([diff_t, diff_b]);
     return recon, diff;
+  
+def AttentionBlock(embed_dim, cond_dim, conditional = True):
+  inputs = tf.keras.Input((None, None, embed_dim,)); # inputs.shape = (batch, h, w, embed_dim)
+  if conditional == True:
+    cond = tf.keras.Input((cond_dim,)); # cond.shape = (batch, cond_dim)
+  
 
 if __name__ == "__main__":
   import numpy as np;
