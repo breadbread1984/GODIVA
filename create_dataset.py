@@ -32,4 +32,13 @@ def load_dataset(directory):
   return dataset;
 
 if __name__ == "__main__":
-  
+  from sys import argv;
+  import cv2;
+  if len(argv) != 2:
+    print('Usage: %s <train_dir>' % argv[0]);
+    exit(1);
+  trainset = load_dataset(argv[1]).map(parse_function_generator());
+  for image, label in trainset:
+    image = image * 128. + tf.reshape([123.68, 116.78, 103.94], (1, 1, -1));
+    cv2.imshow('image', image.numpy().astype(np.uint8));
+    cv2.waitKey();
