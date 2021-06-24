@@ -25,7 +25,7 @@ class Quantize(tf.keras.layers.Layer):
     dist = tf.keras.layers.Lambda(lambda x: tf.math.reduce_sum(tf.math.pow(x[0],2), axis = 1, keepdims = True) - 2 * tf.linalg.matmul(x[0], x[1]) + tf.math.reduce_sum(tf.math.pow(x[1],2), axis = 0, keepdims = True))([samples, self.cluster_mean]);
     cluster_index = tf.keras.layers.Lambda(lambda x: tf.math.argmax(x, axis = 1))(dist); # cluster_index.shape = (n_sample)
     quantize = tf.keras.layers.Lambda(lambda x: tf.nn.embedding_lookup(tf.transpose(x[0]), x[1]))([self.cluster_mean, cluster_index]); # quantize.shape = (n_sample, dim)
-    if tf.keras.backend.learning_phase() == 1 and self.enable_train:
+    if self.enable_train:
       # NOTE: code book is updated during forward propagation
       cluster_index_onehot = tf.keras.layers.Lambda(lambda x, n: tf.one_hot(x, n), arguments = {'n': self.n_embed})(cluster_index); # cluster_index_onehot.shape = (n_sample, n_embed)
       cluster_size = tf.keras.layers.Lambda(lambda x: tf.math.reduce_sum(x, axis = 0))(cluster_index_onehot); # cluster_size.shape = (n_embed)
