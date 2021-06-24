@@ -49,7 +49,7 @@ def main(train_dir, test_dir):
   trainset = load_dataset(train_dir).map(parse_function_generator()).shuffle(batch_size).batch(batch_size).prefetch(tf.data.experimental.AUTOTUNE);
   testset = load_dataset(test_dir).map(parse_function_generator()).shuffle(batch_size).batch(batch_size).prefetch(tf.data.experimental.AUTOTUNE);
   callbacks = [
-    tf.keras.callbacks.Tensorboard(log_dir = './checkpoints'),
+    tf.keras.callbacks.TensorBoard(log_dir = './checkpoints'),
     tf.keras.callbacks.ModelCheckpoint(filepath = './checkpoints/ckpt', save_freq = 10000),
     SummaryCallback()
   ];
