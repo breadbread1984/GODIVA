@@ -13,9 +13,9 @@ def main(train_dir, test_dir):
   if exists('./checkpoints/chkpt'): trainer.load_weights('./checkpoints/ckpt/variables/variables');
   optimizer = tf.keras.optimizers.Adam(3e-4);
   trainer.compile(optimizer = optimizer,
-                  loss = {'decoder': lambda labels, outputs: tf.keras.losses.MeanSquaredError(labels, outputs),
-                          'diff': lambda dummy, outputs: outputs},
-                  loss_weights = {'decoder': 1,'diff': 0.25});
+                  loss = {'output_1': lambda labels, outputs: tf.keras.losses.MeanSquaredError(labels, outputs),
+                          'output_2': lambda dummy, outputs: outputs},
+                  loss_weights = {'output_1': 1,'output_2': 0.25});
   class SummaryCallback(tf.keras.callbacks.Callback):
     def __init__(self, eval_freq = 100):
       self.eval_freq = eval_freq;
