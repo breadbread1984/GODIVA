@@ -33,6 +33,7 @@ def load_dataset(directory):
 
 if __name__ == "__main__":
   from sys import argv;
+  import numpy as np;
   import cv2;
   if len(argv) != 2:
     print('Usage: %s <train_dir>' % argv[0]);
