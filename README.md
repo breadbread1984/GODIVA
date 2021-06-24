@@ -3,6 +3,8 @@ this project implements text2video algorithm introduced in paper [GODIVA: Genera
 
 ## pretrain
 
+generate imagenet dataset with [this script](https://github.com/tensorflow/models/blob/r1.13.0/research/slim/datasets/build_imagenet_data.py).
+
 pretrain VQ-VAE on imagenet with command
 
 ```shell
