@@ -2,7 +2,6 @@
 
 from os.path import exists;
 import tensorflow as tf;
-import tensorflow_addons as tfa;
 from models import VQVAE_Trainer;
 from create_dataset import parse_function_generator, load_dataset;
 
@@ -12,7 +11,7 @@ def main(train_dir, test_dir):
 
   trainer = VQVAE_Trainer();
   if exists('./checkpoints/chkpt'): trainer.load_weights('./checkpoints/ckpt/variables/variables');
-  optimizer = tf.keras.optimizers.Adam(tfa.optimizers.CyclicalLearningRate(1e-4, 1e-3, 10000));
+  optimizer = tf.keras.optimizers.Adam(3e-4);
   trainer.compile(optimizer = optimizer,
                   loss = {'decoder': lambda labels, outputs: tf.keras.losses.MeanSquaredError(labels, outputs),
                           'diff': lambda dummy, outputs: outputs},
