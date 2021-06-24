@@ -42,6 +42,8 @@ class Quantize(tf.keras.layers.Layer):
     cluster_index = tf.keras.layers.Lambda(lambda x: tf.reshape(x[0], (tf.shape(x[1])[0], tf.shape(x[1])[1], tf.shape(x[1])[2],)))([cluster_index, inputs]); # cluster_index.shape = (batch, h, w)
     diff = tf.keras.layers.Lambda(lambda x: tf.math.reduce_mean(tf.math.pow(x[0] - x[1], 2)))([inputs, quantize]); # diff.shape = (n_sample,)
     return quantize, cluster_index, diff;
+  def set_trainable(self, trainable = True):
+    self.train_quantize = trainable;
   def get_config(self):
     config = super(Quantize, self).get_config();
     config['embed_dim'] = self.embed_dim;
