@@ -11,4 +11,4 @@ def main():
   trainer = VQVAE_Trainer();
   if exists('./checkpoints/chkpt'): trainer.load_weights('./checkpoints/ckpt/variables/variables');
   optimizer = tf.keras.optimizers.Adam(1e-5);
-  trainer.compile(optimizer = optimizer, loss = {});
+  trainer.compile(optimizer = optimizer, loss = {'decoder':, 'diff': });
