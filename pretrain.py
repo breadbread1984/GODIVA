@@ -54,6 +54,7 @@ def main(train_dir, test_dir):
     SummaryCallback()
   ];
   trainer.fit(trainset, epochs = 560, validation_data = testset, callbacks = callbacks);
+  trainer.encoder.set_trainable(False);
   trainer.encoder.save('encoder.h5');
   trainer.decoder.save('decoder.h5');
 
