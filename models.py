@@ -17,9 +17,9 @@ class Quantize(tf.keras.layers.Layer):
     cluster_index = tf.math.argmin(dist, axis = 1); # cluster_index.shape = (n_sample)
     cluster_index = tf.reshape(cluster_index, tf.shape(inputs)[:-1]); # cluster_index.shape = (batch, h, w)
     quantize = tf.nn.embedding_lookup(tf.transpose(self.cluster_mean), cluster_index); # quantize.shape = (batch, h, w, dim)
-    e_loss = tf.math.reduce_mean(tf.math.pow(tf.stop_gradient(quantize) - inputs,2));
     q_loss = tf.math.reduce_mean(tf.math.pow(quantize - tf.stop_gradient(inputs),2));
-    loss = e_loss + 0.25 * q_loss;
+    e_loss = tf.math.reduce_mean(tf.math.pow(tf.stop_gradient(quantize) - inputs,2));
+    loss = q_loss + 0.25 * e_loss;
     return quantize, cluster_index, loss;
   def get_config(self):
     config = super(Quantize, self).get_config();
