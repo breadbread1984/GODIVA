@@ -14,7 +14,7 @@ def main(img_path):
   resized = cv2.resize(img, (256, 256)) / 255.;
   normalized = (resized - tf.reshape([0.5,0.5,0.5], (1,1,-1))) / tf.reshape([0.5,0.5,0.5], (1,1,-1));
   inputs = np.expand_dims(normalized, axis = 0);
-  quantized_t, cluster_index_t, diff_t, quantized_b, cluster_index_b, diff_b = encoder(inputs);
+  quantized_t, cluster_index_t, loss_t, quantized_b, cluster_index_b, loss_b = encoder(inputs);
   recon = decoder([quantized_t, quantized_b]);
   recon_img = tf.squeeze(recon, axis = 0).numpy() * np.reshape([0.5,0.5,0.5], (1, 1, -1)) + np.reshape([0.5,0.5,0.5], (1, 1, -1));
   recon_img = 255. * recon_img;
