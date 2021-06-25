@@ -15,7 +15,7 @@ def main(train_dir, test_dir):
   trainer.compile(optimizer = optimizer,
                   loss = {'output_1': lambda labels, outputs: tf.keras.losses.MeanSquaredError()(labels, outputs),
                           'output_2': lambda dummy, outputs: outputs},
-                  loss_weights = {'output_1': 1,'output_2': 0.25});
+                  loss_weights = {'output_1': 1,'output_2': 1});
   class SummaryCallback(tf.keras.callbacks.Callback):
     def __init__(self, eval_freq = 100):
       self.eval_freq = eval_freq;
