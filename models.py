@@ -43,7 +43,7 @@ class Quantize(tf.keras.layers.Layer):
     diff = tf.keras.layers.Lambda(lambda x: tf.math.reduce_mean(tf.math.pow(x[0] - x[1], 2)))([inputs, quantize]); # diff.shape = (n_sample,)
     return quantize, cluster_index, diff;
   def set_trainable(self, trainable = True):
-    self.train_quantize = trainable;
+    self.enable_train = trainable;
   def get_config(self):
     config = super(Quantize, self).get_config();
     config['embed_dim'] = self.embed_dim;
@@ -54,11 +54,6 @@ class Quantize(tf.keras.layers.Layer):
     return config;
   @classmethod
   def from_config(cls, config):
-    self.embed_dim = config['embed_dim'];
-    self.n_embed = config['n_embed'];
-    self.decay = config['decay'];
-    self.eps = config['eps'];
-    self.enable_train = config['enable_train'];
     return cls(**config);
 
 def Encoder(in_channels = 3, out_channels = 128, block_num = 2, res_channels = 32, stride = 4, name = 'encoder'):
