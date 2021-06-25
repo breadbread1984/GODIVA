@@ -23,7 +23,7 @@ class Quantize(tf.keras.layers.Layer):
     samples = tf.keras.layers.Lambda(lambda x: tf.reshape(x, (-1, self.embed_dim,)))(inputs); # samples.shape = (n_sample, dim)
     # dist = (X - cluster_mean)^2 = X' * X - 2 * X' * Embed + trace(Embed' * Embed),  dist.shape = (n_sample, n_embed), euler distances to cluster_meanding vectors
     dist = tf.keras.layers.Lambda(lambda x: tf.math.reduce_sum(tf.math.pow(x[0],2), axis = 1, keepdims = True) - 2 * tf.linalg.matmul(x[0], x[1]) + tf.math.reduce_sum(tf.math.pow(x[1],2), axis = 0, keepdims = True))([samples, self.cluster_mean]);
-    cluster_index = tf.keras.layers.Lambda(lambda x: tf.math.argmax(x, axis = 1))(dist); # cluster_index.shape = (n_sample)
+    cluster_index = tf.keras.layers.Lambda(lambda x: tf.math.argmax(-x, axis = 1))(dist); # cluster_index.shape = (n_sample)
     quantize = tf.keras.layers.Lambda(lambda x: tf.nn.embedding_lookup(tf.transpose(x[0]), x[1]))([self.cluster_mean, cluster_index]); # quantize.shape = (n_sample, dim)
     if self.enable_train:
       # NOTE: code book is updated during forward propagation
