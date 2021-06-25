@@ -19,8 +19,8 @@ def parse_function_generator(output_size=(256, 256)):
     batched_image = tf.expand_dims(image, axis=0);
     batched_resized = tf.image.resize(batched_image, (output_size[0], output_size[1]), method=tf.image.ResizeMethod.BILINEAR);
     image = tf.squeeze(batched_resized, axis = 0);
-    image = tf.cast(image, dtype=tf.float32) - tf.reshape([123.68, 116.78, 103.94], (1, 1, -1));
-    image = image / 128.;
+    image = tf.cast(image, dtype = tf.float32) / 255.; # totensor
+    image = (image - tf.reshape([0.5,0.5,0.5], (1,1,-1))) / tf.reshape([0.5,0.5,0.5], (1,1,-1));
     label = tf.cast(feature['image/class/label'], dtype=tf.int32);
     return image, {'output_1': image, 'output_2': label};
   return parse_function;
@@ -40,6 +40,7 @@ if __name__ == "__main__":
     exit(1);
   trainset = load_dataset(argv[1]).map(parse_function_generator());
   for image, label in trainset:
-    image = image * 128. + tf.reshape([123.68, 116.78, 103.94], (1, 1, -1));
+    image = image * tf.reshape([0.5,0.5,0.5], (1, 1, -1)) + tf.reshape([0.5,0.5,0.5], (1, 1, -1));
+    image = image * 255.;
     cv2.imshow('image', image.numpy().astype(np.uint8));
     cv2.waitKey();
