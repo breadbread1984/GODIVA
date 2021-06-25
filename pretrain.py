@@ -33,7 +33,8 @@ def main(train_dir, test_dir):
       self.recon_loss.update_state(recon_loss);
       self.quant_loss.update_state(diff);
       if batch % self.eval_freq == 0:
-        recon = recon * 128. + tf.reshape([123.68, 116.78, 103.94], (1, 1, 1, -1));
+        recon = recon * tf.reshape([0.5,0.5,0.5], (1, 1, 1, -1)) + tf.reshape([0.5,0.5,0.5], (1, 1, 1, -1));
+        recon = recon * 255.;
         with self.log.as_default():
           tf.summary.scalar('reconstruction loss', self.recon_loss.result(), step = optimizer.iterations);
           tf.summary.scalar('quantize loss', self.quant_loss.result(), step = optimizer.iterations);
