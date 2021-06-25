@@ -20,7 +20,8 @@ class Quantize(tf.keras.layers.Layer):
     q_loss = tf.math.reduce_mean(tf.math.pow(quantize - tf.stop_gradient(inputs),2));
     e_loss = tf.math.reduce_mean(tf.math.pow(tf.stop_gradient(quantize) - inputs,2));
     loss = q_loss + 0.25 * e_loss;
-    return quantize, cluster_index, loss;
+    outputs = inputs + tf.stop_gradient(quantize - inputs);
+    return outputs, cluster_index, loss;
   def get_config(self):
     config = super(Quantize, self).get_config();
     config['embed_dim'] = self.embed_dim;
