@@ -10,7 +10,7 @@ batch_size = 128;
 def main(train_dir, test_dir):
 
   trainer = VQVAE_Trainer();
-  if exists('./checkpoints/chkpt'): trainer.load_weights('./checkpoints/ckpt/variables/variables');
+  if exists('./checkpoints/chkpt'): trainer.load_weights('./checkpoints/ckpt');
   optimizer = tf.keras.optimizers.Adam(3e-4);
   trainer.compile(optimizer = optimizer,
                   loss = {'output_1': lambda labels, outputs: tf.keras.losses.MeanSquaredError()(labels, outputs),
@@ -54,7 +54,6 @@ def main(train_dir, test_dir):
     SummaryCallback()
   ];
   trainer.fit(trainset, epochs = 560, validation_data = testset, callbacks = callbacks);
-  trainer.encoder.set_trainable(False);
   trainer.encoder.save('encoder.h5');
   trainer.decoder.save('decoder.h5');
 
