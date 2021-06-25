@@ -15,9 +15,8 @@ class Quantize(tf.keras.layers.Layer):
     # dist = (X - cluster_mean)^2 = X' * X - 2 * X' * Embed + trace(Embed' * Embed),  dist.shape = (n_sample, n_embed), euler distances to cluster_meanding vectors
     dist = tf.math.reduce_sum(tf.math.pow(samples,2), axis = 1, keepdims = True) - 2 * tf.linalg.matmul(samples, self.cluster_mean) + tf.math.reduce_sum(tf.math.pow(self.cluster_mean,2), axis = 0, keepdims = True);
     cluster_index = tf.math.argmin(dist, axis = 1); # cluster_index.shape = (n_sample)
-    quantize = tf.nn.embedding_lookup(tf.transpose(self.cluster_mean), cluster_index); # quantize.shape = (n_sample, dim)
-    quantize = tf.reshape(quantize, (tf.shape(inputs)[0], tf.shape(inputs)[1], tf.shape(inputs)[2], tf.shape(quantize)[-1])); # quantize.shape = (batch, h, w, dim)
-    cluster_index = tf.reshape(cluster_index, (tf.shape(inputs)[0], tf.shape(inputs)[1], tf.shape(inputs)[2],)); # cluster_index.shape = (batch, h, w)
+    cluster_index = tf.reshape(cluster_index, tf.shape(inputs)[:-1]); # cluster_index.shape = (batch, h, w)
+    quantize = tf.nn.embedding_lookup(tf.transpose(self.cluster_mean), cluster_index); # quantize.shape = (batch, h, w, dim)
     e_loss = tf.math.reduce_mean(tf.math.pow(tf.stop_gradient(quantize) - inputs,2));
     q_loss = tf.math.reduce_mean(tf.math.pow(quantize - tf.stop_gradient(inputs),2));
     loss = e_loss + 0.25 * q_loss;
