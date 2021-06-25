@@ -36,7 +36,7 @@ class Quantize(tf.keras.layers.Layer):
       self.cluster_sum.assign(updated_cluster_sum);
       n_sample = tf.keras.layers.Lambda(lambda x: tf.math.reduce_sum(x))(self.cluster_size); # n_sample.shape = ()
       cluster_size = tf.keras.layers.Lambda(lambda x, e, n: (x[0] + e) * x[1] / (x[1] + n * e), arguments = {'e': self.eps, 'n': self.n_embed})([self.cluster_size, n_sample]); # cluster_size.shape = (n_embed)
-      cluster_mean = tf.keras.layers.Lambda(lambda x: x[0] / x[1])([self.cluster_sum, self.cluster_size]); # cluster_mean.shape = (dim, n_embed)
+      cluster_mean = tf.keras.layers.Lambda(lambda x: x[0] / x[1])([self.cluster_sum, cluster_size]); # cluster_mean.shape = (dim, n_embed)
       self.cluster_mean.assign(cluster_mean);
     quantize = tf.keras.layers.Lambda(lambda x: tf.reshape(x[0], (tf.shape(x[1])[0], tf.shape(x[1])[1], tf.shape(x[1])[2], tf.shape(x[0])[-1])))([quantize, inputs]); # quantize.shape = (batch, h, w, dim)
     cluster_index = tf.keras.layers.Lambda(lambda x: tf.reshape(x[0], (tf.shape(x[1])[0], tf.shape(x[1])[1], tf.shape(x[1])[2],)))([cluster_index, inputs]); # cluster_index.shape = (batch, h, w)
