@@ -11,7 +11,7 @@ def main(img_path):
     raise Exception('invalid image path');
   encoder = tf.keras.models.load_model('encoder.h5', custom_objects = {'Quantize': Quantize});
   decoder = tf.keras.models.load_model('decoder.h5');
-  resized = cv2.resize(img, (256, 256)) / 255.;
+  resized = cv2.resize(img, (64, 64)) / 255.;
   normalized = (resized - tf.reshape([0.5,0.5,0.5], (1,1,-1))) / tf.reshape([0.5,0.5,0.5], (1,1,-1));
   inputs = np.expand_dims(normalized, axis = 0);
   quantized_t, cluster_index_t, loss_t, quantized_b, cluster_index_b, loss_b = encoder(inputs);

@@ -38,7 +38,7 @@ if __name__ == "__main__":
   if len(argv) != 2:
     print('Usage: %s <train_dir>' % argv[0]);
     exit(1);
-  trainset = load_dataset(argv[1]).map(parse_function_generator());
+  trainset = load_dataset(argv[1]).map(parse_function_generator(output_size=(64,64)));
   for image, label in trainset:
     image = image * tf.reshape([0.5,0.5,0.5], (1, 1, -1)) + tf.reshape([0.5,0.5,0.5], (1, 1, -1));
     image = image * 255.;
