@@ -109,11 +109,55 @@ class VQVAE_Trainer(tf.keras.Model):
     loss = tf.keras.layers.Add()([loss_t, loss_b]);
     return recon, loss;
   
-def AttentionBlock(embed_dim, cond_dim, conditional = True):
+def AttentionBlock(embed_dim,):
   inputs = tf.keras.Input((None, None, embed_dim,)); # inputs.shape = (batch, h, w, embed_dim)
-  if conditional == True:
-    cond = tf.keras.Input((cond_dim,)); # cond.shape = (batch, cond_dim)
-  
+  results = tf.keras.layers.LayerNormalization(axis = [1,2,3])(inputs);
+  # TODO
+
+def FullAttention(key_dim, value_dim, num_heads):
+  query = tf.keras.Input((num_heads, None, key_dim // num_heads)); # query.shape = (batch, heads, query_length, key_dim // heads)
+  key = tf.keras.Input((num_heads, None, key_dim // num_heads)); # key.shape = (batch, heads, key_length, key_dim // heads)
+  value = tf.keras.Input((num_heads, None, value_dim // num_heads)); # value.shape = (batch, heads, key_length, value_dim // heads)
+  mask = tf.keras.Input((1, None, None)); # mask.shape = (batch, 1, query_length or 1, key_length)
+  # 1) correlation matrix of query and key
+  qk = tf.keras.layers.Lambda(lambda x: tf.linalg.matmul(x[0], x[1], transpose_b = True))([query, key]); # qk.shape = (batch, heads, query_length, key_length)
+  logits = tf.keras.layers.Lambda(lambda x, kd: x[0] / tf.math.sqrt(tf.cast(kd, dtype = tf.float32)) + x[1] * -1e9, arguments = {'kd': key_dim // num_heads})([qk, mask]); # logits.shape = (batch, heads, query_length, key_length)
+  attention = tf.keras.layers.Softmax()(logits); # attention.shape = (batch, heads, query_length, key_length)
+  # 2) weighted sum of value elements for each query element
+  attention = tf.keras.layers.Dropout()(attention);
+  results = tf.keras.layers.Lambda(lambda x: tf.linalg.matmul(x[0], x[1]))([attention, value]); # results.shape = (batch, heads, query_length, value_dim // heads)
+  return tf.keras.Model(inputs = (query, key, value, mask), outputs = results);
+
+def MultiHeadAttention(key_dim, value_dim, num_heads, attn_type = 'full'):
+  assert attn_type in ['full', 'axial', 'sparse'];
+  query = tf.keras.Input((None, key_dim,)); # query.shape = (batch, query_length, key_dim)
+  key = tf.keras.Input((None, key_dim,)); # key.shape = (batch, key_length, key_dim)
+  value = tf.keras.Input((None, value_dim,)); # value.shape = (batch, key_length, value_dim)
+  mask = tf.keras.Input((1, None, None)); # mask.shape = (batch, 1, query_length or 1, key_length)
+  # 1) change to channels which can divided by num_heads
+  query_dense = tf.keras.layers.Dense(units = key_dim // num_heads * num_heads)(query);
+  key_dense = tf.keras.layers.Dense(units = key_dim // num_heads * num_heads)(key);
+  value_dense = tf.keras.layers.Dense(units = value_dim // num_heads * num_heads)(value);
+  # 2) split the dimension to form mulitiple heads
+  query_splitted = tf.keras.layers.Reshape((-1, num_heads, key_dim // num_heads))(query_dense); # query_splitted.shape = (batch, query_length, num_heads, key_dim // num_heads)
+  query_splitted = tf.keras.layers.Lambda(lambda x: tf.transpose(x, (0, 2, 1, 3)))(query_splitted); # query_splitted.shape = (batch, num_heads, query_length, key_dim // num_heads)
+  key_splitted = tf.keras.layers.Reshape((-1, num_heads, key_dim // num_heads))(key_dense); # key_splitted.shape = (batch, key_length, num_heads, key_dim // num_heads)
+  key_splitted = tf.keras.layers.Lambda(lambda x: tf.transpose(x, (0, 2, 1, 3)))(key_splitted); # key_splitted.shape = (batch, num_heads, key_length, key_dim // num_heads)
+  value_splitted = tf.keras.layers.Reshape((-1, num_heads, value_dim // num_heads))(value_dense); # value_splitted.shape = (batch, key_length, num_heads, value_dim // num_heads)
+  value_splitted = tf.keras.layers.Lambda(lambda x: tf.transpose(x, (0, 2, 1, 3)))(value_splitted); # value_splitted.shape = (batch, num_heads, key_length, value_dim // num_heads)
+  if attn_type == 'full':
+    attended = FullAttention(key_dim, value_dim, num_heads)([query_splitted, key_splitted, value_splitted, mask]); # results.shape = (batch, num_heads, query_length, value_dim // num_heads)
+  elif attn_type == 'axial':
+    pass;
+  elif attn_type == 'sparse':
+    pass;
+  else:
+    raise Exception('invalid attention type!');
+  attended = tf.keras.layers.Lambda(lambda x: tf,transpose(x, (0, 2, 1, 3)))(attended); # attended.shape = (batch, query_length, num_heads, value_dim // num_heads)
+  concated = tf.keras.layers.Reshape((-1, value_dim))(attended); # concated.shape = (batch, query_length, value_dim)
+  # 3) output
+  results = tf.keras.layers.Dense(key_dim)(concated); # results.shape = (batch, query_length, key_dim)
+  return tf.keras.Model(inputs = (query, key, value, mask), outputs = results);
 
 if __name__ == "__main__":
   import numpy as np;
