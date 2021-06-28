@@ -107,8 +107,7 @@ def Decoder(in_channels, out_channels, hidden_channels, block_num, res_channels 
   for i in range(block_num):
     short = results;
     results = tf.keras.layers.ReLU()(results);
-    results = tf.keras.layers.Conv2D(res_channels, (3,3), padding = 'same')(results);
-    results = tf.keras.layers.ReLU()(results);
+    results = tf.keras.layers.Conv2D(res_channels, (3,3), padding = 'same', activation = tf.keras.activations.relu)(results);
     results = tf.keras.layers.Conv2D(hidden_channels, (1,1), padding = 'same')(results);
     results = tf.keras.layers.Add()([results, short]);
   results = tf.keras.layers.ReLU()(results);
@@ -160,7 +159,7 @@ class VQVAE_Trainer(tf.keras.Model):
     recon = self.decoder([quantized_t, quantized_b]);
     loss = tf.keras.layers.Add()([loss_t, loss_b]);
     return recon, loss;
-  
+
 def AttentionBlock(embed_dim,):
   inputs = tf.keras.Input((None, None, embed_dim,)); # inputs.shape = (batch, h, w, embed_dim)
   results = tf.keras.layers.LayerNormalization(axis = [1,2,3])(inputs);
