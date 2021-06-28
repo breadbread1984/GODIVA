@@ -7,15 +7,15 @@ from create_dataset import parse_function_generator, load_dataset;
 
 batch_size = 128;
 
-def main(train_dir, test_dir):
+def main(train_dir, test_dir, quantize_type = 'normal'):
 
-  trainer = VQVAE_Trainer();
+  trainer = VQVAE_Trainer(quantize_type = quantize_type);
   if exists('./checkpoints/chkpt'): trainer.load_weights('./checkpoints/ckpt');
   optimizer = tf.keras.optimizers.Adam(3e-4);
   trainer.compile(optimizer = optimizer,
                   loss = {'output_1': lambda labels, outputs: tf.keras.losses.MeanSquaredError()(labels, outputs),
                           'output_2': lambda dummy, outputs: outputs},
-                  loss_weights = {'output_1': 1,'output_2': 1});
+                  loss_weights = {'output_1': 1,'output_2': 1 if quantize_type == 'normal' else 0.25});
   class SummaryCallback(tf.keras.callbacks.Callback):
     def __init__(self, eval_freq = 100):
       self.eval_freq = eval_freq;
@@ -60,7 +60,8 @@ def main(train_dir, test_dir):
 
 if __name__ == "__main__":
   from sys import argv;
-  if len(argv) != 3:
-    print('Usage: %s <train_dir> <test_dir>' % argv[0]);
+  if len(argv) != 4:
+    print('Usage: %s <quantize_type> <train_dir> <test_dir>' % argv[0]);
     exit(1);
-  main(argv[1], argv[2]);
+  assert argv[1] in ['normal', 'ema_update'];
+  main(argv[2], argv[3], argv[1]);
