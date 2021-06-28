@@ -35,25 +35,20 @@ def Encoder(in_channels = 3, out_channels = 128, block_num = 2, res_channels = 3
   assert stride in [2, 4];
   inputs = tf.keras.Input((None, None, in_channels)); # inputs.shape = (batch, height, width, in_channels)
   if stride == 4:
-    results = tf.keras.layers.Conv2D(out_channels // 2, (4,4), strides = (2,2), padding = 'same')(inputs);
-    results = tf.keras.layers.ReLU()(results);
-    results = tf.keras.layers.Conv2D(out_channels, (4,4), strides = (2,2), padding = 'same')(results);
-    results = tf.keras.layers.ReLU()(results);
+    results = tf.keras.layers.Conv2D(out_channels // 2, (4,4), strides = (2,2), padding = 'same', activation = tf.keras.activations.relu)(inputs);
+    results = tf.keras.layers.Conv2D(out_channels, (4,4), strides = (2,2), padding = 'same', activation = tf.keras.activations.relu)(results);
     results = tf.keras.layers.Conv2D(out_channels, (3,3), padding = 'same')(results);
   elif stride == 2:
-    results = tf.keras.layers.Conv2D(out_channels // 2, (4,4), strides = (2,2), padding = 'same')(inputs);
-    results = tf.keras.layers.ReLU()(results);
+    results = tf.keras.layers.Conv2D(out_channels // 2, (4,4), strides = (2,2), padding = 'same', activation = tf.keras.activations.relu)(inputs);
     results = tf.keras.layers.Conv2D(out_channels, (3,3), padding = 'same')(results);
   else:
     raise Exception('invalid stride option');
   for i in range(block_num):
     short = results;
     results = tf.keras.layers.ReLU()(results);
-    results = tf.keras.layers.Conv2D(res_channels, (3,3), padding = 'same')(results);
-    results = tf.keras.layers.ReLU()(results);
+    results = tf.keras.layers.Conv2D(res_channels, (3,3), padding = 'same', activation = tf.keras.activations.relu)(results);
     results = tf.keras.layers.Conv2D(out_channels, (1,1), padding = 'same')(results);
     results = tf.keras.layers.Add()([results, short]);
-  results = tf.keras.layers.ReLU()(results);
   return tf.keras.Model(inputs = inputs, outputs = results, name = name);
 
 def Decoder(in_channels, out_channels, hidden_channels, block_num, res_channels = 32, strides = 4, name = 'decoder'):
@@ -71,9 +66,9 @@ def Decoder(in_channels, out_channels, hidden_channels, block_num, res_channels 
   if strides == 4:
     results = tf.keras.layers.Conv2DTranspose(hidden_channels // 2, (4,4), strides = (2,2), padding = 'same')(results);
     results = tf.keras.layers.ReLU()(results);
-    results = tf.keras.layers.Conv2DTranspose(out_channels, (4,4), strides = (2,2), padding = 'same')(results);
+    results = tf.keras.layers.Conv2DTranspose(out_channels, (4,4), strides = (2,2), padding = 'same', activation = tf.keras.activations.sigmoid)(results);
   elif strides == 2:
-    results = tf.keras.layers.Conv2DTranspose(out_channels, (4,4), strides = (2,2), padding = 'same')(results);
+    results = tf.keras.layers.Conv2DTranspose(out_channels, (4,4), strides = (2,2), padding = 'same', activation = tf.keras.activations.sigmoid)(results);
   else:
     raise Exception('invalid stride option');
   return tf.keras.Model(inputs = inputs, outputs = results, name = name);
