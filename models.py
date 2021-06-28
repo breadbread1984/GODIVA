@@ -71,6 +71,7 @@ def Decoder(in_channels, out_channels, hidden_channels, block_num, res_channels 
     results = tf.keras.layers.Conv2DTranspose(out_channels, (4,4), strides = (2,2), padding = 'same', activation = tf.keras.activations.sigmoid)(results);
   else:
     raise Exception('invalid stride option');
+  results = tf.keras.layers.Lambda(lambda x: x - 0.5)(results);
   return tf.keras.Model(inputs = inputs, outputs = results, name = name);
 
 def VQVAE_Encoder(in_channels = 3, hidden_channels = 128, block_num = 2, res_channels = 32, embed_dim = 64, n_embed = 512, name = 'encoder'):
