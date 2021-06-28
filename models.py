@@ -112,8 +112,7 @@ def Decoder(in_channels, out_channels, hidden_channels, block_num, res_channels 
     results = tf.keras.layers.Add()([results, short]);
   results = tf.keras.layers.ReLU()(results);
   if strides == 4:
-    results = tf.keras.layers.Conv2DTranspose(hidden_channels // 2, (4,4), strides = (2,2), padding = 'same')(results);
-    results = tf.keras.layers.ReLU()(results);
+    results = tf.keras.layers.Conv2DTranspose(hidden_channels // 2, (4,4), strides = (2,2), padding = 'same', activation = tf.keras.activations.relu)(results);
     results = tf.keras.layers.Conv2DTranspose(out_channels, (4,4), strides = (2,2), padding = 'same', activation = tf.keras.activations.sigmoid)(results);
   elif strides == 2:
     results = tf.keras.layers.Conv2DTranspose(out_channels, (4,4), strides = (2,2), padding = 'same', activation = tf.keras.activations.sigmoid)(results);
