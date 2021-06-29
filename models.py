@@ -2,7 +2,7 @@
 
 import tensorflow as tf;
 from sonnet.nets import VectorQuantizer, VectorQuantizerEMA;
-'''
+
 class Quantize(tf.keras.layers.Layer):
   def __init__(self, embed_dim = 128, n_embed = 10000, **kwargs):
     self.embed_dim = embed_dim;
@@ -64,9 +64,9 @@ class QuantizeEma(tf.keras.layers.Layer):
       self.cluster_mean.assign(cluster_mean);
     cluster_index = tf.reshape(cluster_index, tf.shape(inputs)[:-1]); # cluster_index.shape = (batch, h, w)
     quantize = tf.nn.embedding_lookup(tf.transpose(self.cluster_mean), cluster_index); # quantize.shape = (batch, h, w, dim)
-    loss = tf.math.reduce_mean((inputs - tf.stop_gradient(quantize)) ** 2); # diff.shape = (n_sample,)
+    e_loss = tf.math.reduce_mean((inputs - tf.stop_gradient(quantize)) ** 2); # diff.shape = (n_sample,)
     outputs = inputs + tf.stop_gradient(quantize - inputs);
-    return outputs, cluster_index, loss;
+    return outputs, cluster_index, 0.25 * e_loss;
   def set_trainable(self, enable_train = True):
     self.enable_train = enable_train;
   def get_config(self):
@@ -80,7 +80,7 @@ class QuantizeEma(tf.keras.layers.Layer):
   @classmethod
   def from_config(cls, config):
     return cls(**config);
-'''
+
 class Quantize(tf.keras.Model):
   def __init__(self, embed_dim = 128, n_embed = 10000, **kwargs):
     super(Quantize, self).__init__(**kwargs);
