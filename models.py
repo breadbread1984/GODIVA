@@ -100,7 +100,7 @@ def Encoder(in_channels = 3, out_channels = 128, block_num = 2, res_channels = 3
     results = tf.keras.layers.Add()([results, short]);
   return tf.keras.Model(inputs = inputs, outputs = results, name = name);
 
-def Decoder(in_channels, out_channels, hidden_channels, block_num, res_channels = 32, strides = 4, name = 'decoder'):
+def Decoder(in_channels, out_channels, hidden_channels = 128, block_num = 2, res_channels = 32, strides = 4, name = 'decoder'):
   assert strides in [2, 4];
   inputs = tf.keras.Input((None, None, in_channels)); # inputs.shape = (batch, height, width, in_channels)
   results = tf.keras.layers.Conv2D(hidden_channels, (3,3), padding = 'same')(inputs);
@@ -222,3 +222,9 @@ if __name__ == "__main__":
   print(quantized_b.shape, cluster_index_b.shape, loss_b.shape);
   results = decoder([quantized_t, quantized_b]);
   print(results.shape);
+  tf.keras.utils.plot_model(model = encoder, to_file = 'encoder.png', show_shapes = True, dpi = 64);
+  tf.keras.utils.plot_model(model = decoder, to_file = 'decoder.png', show_shapes = True, dpi = 64);
+  encoder = Encoder();
+  decoder = Decoder(64,64);
+  tf.keras.utils.plot_model(model = encoder, to_file = 'encoder.png', show_shapes = True, dpi = 64);
+  tf.keras.utils.plot_model(model = decoder, to_file = 'decoder.png', show_shapes = True, dpi = 64);
