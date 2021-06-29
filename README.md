@@ -17,6 +17,12 @@ save checkpoint to pretrain model file with command
 python3 save_pretrain_model.py (original|ema_update)
 ```
 
+test pretrained model with command
+
+```shell
+python3 test_pretrain.py (original|ema_update) <path/to/image>
+```
+
 a pair of imagenet-pretrained ema update encoder and decoder are provided in this repo.
 
 here are some reconstruction examples.
