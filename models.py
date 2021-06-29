@@ -37,12 +37,13 @@ class QuantizeEma(tf.keras.layers.Layer):
     self.n_embed = n_embed;
     self.decay = decay;
     self.eps = eps;
-    self.enable_train;
+    self.enable_train = enable_train;
     super(QuantizeEma, self).__init(**kwargs);
   def build(self, input_shape):
     self.cluster_mean = self.add_weight(shape = (self.embed_dim, self.n_embed), dtype = tf.float32, initializer = tf.keras.initializers.RandomNormal(stddev = 1.), trainable = True, name = 'cluster_mean');
     self.cluster_size = self.add_weight(shape = (self.n_embed,), dtype = tf.float32, initializer = tf.keras.initializers.Zeros(), trainable = True, name = 'cluster_size');
     self.cluster_sum = self.add_weight(shape = (self.embed_dim, self.n_embed), dtype = tf.float32, initializer = tf.keras.initializers.RandomNormal(stddev = 1.), trainable = True, name = 'cluster_sum');
+    self.cluster_mean.assign(self.cluster_sum);
   def call(self, inputs):
     samples = tf.reshape(inputs, (-1, self.embed_dim,)); # samples.shape = (n_sample, dim)
     # dist = (X - cluster_mean)^2 = X' * X - 2 * X' * Embed + trace(Embed' * Embed),  dist.shape = (n_sample, n_embed), euler distances to cluster_meanding vectors
