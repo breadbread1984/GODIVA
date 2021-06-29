@@ -8,6 +8,13 @@ generate imagenet dataset with [this script](https://github.com/tensorflow/model
 pretrain VQ-VAE on imagenet with command
 
 ```shell
-python3 pretrain.py <path/to/trainset> <path/to/testset>
+python3 pretrain.py (original|ema_update) <path/to/trainset> <path/to/testset>
 ```
 
+save checkpoint to pretrain model file with command
+
+```shell
+python3 save_pretrain_model.py (original|ema_update)
+```
+
+a pair of imagenet-pretrained ema update encoder and decoder are provided in this repo.
