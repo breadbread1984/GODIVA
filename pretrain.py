@@ -6,6 +6,7 @@ from models import VQVAE_Trainer;
 from create_dataset import parse_function_generator, load_dataset;
 
 batch_size = 128;
+img_size = (64, 64);
 
 def main(train_dir, test_dir, quantize_type = 'normal'):
 
@@ -19,7 +20,7 @@ def main(train_dir, test_dir, quantize_type = 'normal'):
   class SummaryCallback(tf.keras.callbacks.Callback):
     def __init__(self, eval_freq = 100):
       self.eval_freq = eval_freq;
-      testset = load_dataset(test_dir).map(parse_function_generator(output_size=(64,64))).repeat(-1).batch(1);
+      testset = load_dataset(test_dir).map(parse_function_generator(output_size=img_size)).repeat(-1).batch(1);
       self.iter = iter(testset);
       self.recon_loss = tf.keras.metrics.Mean(name = 'recon_loss', dtype = tf.float32);
       self.quant_loss = tf.keras.metrics.Mean(name = 'quant_loss', dtype = tf.float32);
@@ -47,8 +48,8 @@ def main(train_dir, test_dir, quantize_type = 'normal'):
       pass;
   
   # load imagenet dataset
-  trainset = load_dataset(train_dir).map(parse_function_generator(output_size=(64,64))).shuffle(batch_size).batch(batch_size).prefetch(tf.data.experimental.AUTOTUNE);
-  testset = load_dataset(test_dir).map(parse_function_generator(output_size=(64,64))).shuffle(batch_size).batch(batch_size).prefetch(tf.data.experimental.AUTOTUNE);
+  trainset = load_dataset(train_dir).map(parse_function_generator(output_size=img_size)).shuffle(batch_size).batch(batch_size).prefetch(tf.data.experimental.AUTOTUNE);
+  testset = load_dataset(test_dir).map(parse_function_generator(output_size=img_size)).shuffle(batch_size).batch(batch_size).prefetch(tf.data.experimental.AUTOTUNE);
   callbacks = [
     tf.keras.callbacks.TensorBoard(log_dir = './checkpoints'),
     tf.keras.callbacks.ModelCheckpoint(filepath = './checkpoints/ckpt', save_freq = 10000),
