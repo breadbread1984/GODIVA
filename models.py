@@ -38,7 +38,7 @@ class QuantizeEma(tf.keras.layers.Layer):
     self.decay = decay;
     self.eps = eps;
     self.enable_train = enable_train;
-    super(QuantizeEma, self).__init(**kwargs);
+    super(QuantizeEma, self).__init__(**kwargs);
   def build(self, input_shape):
     self.cluster_mean = self.add_weight(shape = (self.embed_dim, self.n_embed), dtype = tf.float32, initializer = tf.keras.initializers.RandomNormal(stddev = 1.), trainable = True, name = 'cluster_mean');
     self.cluster_size = self.add_weight(shape = (self.n_embed,), dtype = tf.float32, initializer = tf.keras.initializers.Zeros(), trainable = True, name = 'cluster_size');
