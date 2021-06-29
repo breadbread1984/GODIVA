@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 
 import tensorflow as tf;
-from sonnet import VectorQuantizer, VectorQuantizerEMA;
+from sonnet.nets import VectorQuantizer, VectorQuantizerEMA;
 '''
 class Quantize(tf.keras.layers.Layer):
   def __init__(self, embed_dim = 128, n_embed = 10000, **kwargs):
@@ -231,8 +231,8 @@ if __name__ == "__main__":
   tf.keras.backend.set_learning_phase(1);
   encoder = VQVAE_Encoder();
   decoder = VQVAE_Decoder();
-  encoder.save('encoder.h5');
-  decoder.save('decoder.h5');
+  encoder.save_weights('encoder_weights.h5');
+  decoder.save_weights('decoder_weights.h5');
   inputs = np.random.normal(size = (4,256,256,3));
   quantized_t, cluster_index_t, loss_t, quantized_b, cluster_index_b, loss_b = encoder(inputs);
   print(quantized_t.shape, cluster_index_t.shape, loss_t.shape);
