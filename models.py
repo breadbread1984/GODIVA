@@ -1,7 +1,8 @@
 #!/usr/bin/python3
 
 import tensorflow as tf;
-
+from sonnet import VectorQuantizer, VectorQuantizerEMA;
+'''
 class Quantize(tf.keras.layers.Layer):
   def __init__(self, embed_dim = 128, n_embed = 10000, **kwargs):
     self.embed_dim = embed_dim;
@@ -79,6 +80,22 @@ class QuantizeEma(tf.keras.layers.Layer):
   @classmethod
   def from_config(cls, config):
     return cls(**config);
+'''
+class Quantize(tf.keras.Model):
+  def __init__(self, embed_dim = 128, n_embed = 10000, **kwargs):
+    super(Quantize, self).__init__(**kwargs);
+    self.quantize = VectorQuantizer(embed_dim, n_embed, 0.25);
+  def call(self, inputs):
+    retvals = self.quantize(inputs, self.trainable);
+    return retvals['quantize'], retvals['encoding_indices'], retvals['loss'];
+
+class QuantizeEma(tf.keras.Model):
+  def __init__(self, embed_dim = 128, n_embed = 10000, decay = 0.99, eps = 1e-5, **kwargs):
+    super(QuantizeEma, self).__init__(**kwargs);
+    self.quantize = VectorQuantizerEMA(embed_dim, n_embed, 0.25, decay, eps);
+  def call(self, inputs):
+    retvals = self.quantize(inputs, self.trainable);
+    return retvals['quantize'], retvals['encoding_indices'], retvals['loss'];
 
 def Encoder(in_channels = 3, out_channels = 128, block_num = 2, res_channels = 32, stride = 4, name = 'encoder'):
   assert stride in [2, 4];
