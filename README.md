@@ -18,3 +18,11 @@ python3 save_pretrain_model.py (original|ema_update)
 ```
 
 a pair of imagenet-pretrained ema update encoder and decoder are provided in this repo.
+
+here are some reconstruction examples.
+
+<p align="center">
+ <table>
+   <tr><td><img src="pics/car.png" /></td><td><img src="pics/cat.png" /></td><td><img src="pics/house.png" /></td><td><img src="pics/people.png"></td></tr>
+ </table>
+</p>
