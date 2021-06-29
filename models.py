@@ -223,7 +223,14 @@ def AxialAttention(key_dim, value_dim, num_heads, origin_shape = None, axial_dim
   results = tf.keras.layers.Lambda(lambda x: tf.reshape(x, (tf.shape(x)[0], tf.shape(x)[1], -1, tf.shape(x)[-1])))(results); # results.shape = (batch, heads, query_length = np.prod(origin_shape), value_dim // heads)
   return tf.keras.Model(inputs = (query, key, value, mask), outputs = results);
 
-def MultiHeadAttention(key_dim, value_dim, num_heads, attn_type = 'full', origin_shape = None, axial_dim = None):
+def SparseAttention(key_dim, value_dim, num_heads,):
+  query = tf.keras.Input((num_heads, None, key_dim // num_heads)); # query.shape = (batch, heads, query_length, key_dim // heads)
+  key = tf.keras.Input((num_heads, None, key_dim // num_heads)); # key.shape = (batch, heads, key_length, key_dim // heads)
+  value = tf.keras.Input((num_heads, None, value_dim // num_heads)); # value.shape = (batch, heads, key_length, value_dim // heads)
+  mask = tf.keras.Input((1, None, None)); # mask.shape = (batch, 1, query_length, key_length)
+  
+
+def MultiHeadAttention(key_dim, value_dim, num_heads, attn_type = 'full', origin_shape = (64, 64), axial_dim = -1):
   assert attn_type in ['full', 'axial', 'sparse'];
   query = tf.keras.Input((None, key_dim,)); # query.shape = (batch, query_length, key_dim)
   key = tf.keras.Input((None, key_dim,)); # key.shape = (batch, key_length, key_dim)
