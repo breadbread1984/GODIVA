@@ -1,17 +1,20 @@
 #!/usr/bin/python3
 
+from os.path import join;
 import numpy as np;
 import cv2;
 import tensorflow as tf;
-from models import Quantize;
+from models import Quantize, QuantizeEma;
 
-def main(img_path):
+img_size = (64,64);
+
+def main(img_path, quantize_type = 'original'):
   img = cv2.imread(img_path);
   if img is None:
     raise Exception('invalid image path');
-  encoder = tf.keras.models.load_model('encoder.h5', custom_objects = {'Quantize': Quantize});
-  decoder = tf.keras.models.load_model('decoder.h5');
-  resized = cv2.resize(img, (64, 64)) / 255.;
+  encoder = tf.keras.models.load_model(join('models', 'encoder.h5'), custom_objects = {'Quantize': Quantize, 'QuantizeEma': QuantizeEma});
+  decoder = tf.keras.models.load_model(join('models', 'decoder.h5'));
+  resized = cv2.resize(img, img_size) / 255.;
   normalized = (resized - tf.reshape([0.5,0.5,0.5], (1,1,-1))) / tf.reshape([0.5,0.5,0.5], (1,1,-1));
   inputs = np.expand_dims(normalized, axis = 0);
   quantized_t, cluster_index_t, loss_t, quantized_b, cluster_index_b, loss_b = encoder(inputs);
@@ -23,7 +26,7 @@ def main(img_path):
 
 if __name__ == "__main__":
   from sys import argv;
-  if len(argv) != 2:
-    print('Usage: %s <image>' % argv[0]);
+  if len(argv) != 3:
+    print('Usage: %s (original|ema_update) <image>' % argv[0]);
     exit(1);
-  main(argv[1]);
+  main(argv[2], argv[1]);
