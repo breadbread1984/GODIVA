@@ -11,7 +11,7 @@ def main(img_path, quantize_type = 'original'):
   img = cv2.imread(img_path);
   if img is None:
     raise Exception('invalid image path');
-encoder = tf.keras.models.load_model('encoder.h5', custom_objects = {'Quantize': Quantize, 'QuantizeEma': QuantizeEma});
+  encoder = tf.keras.models.load_model('encoder.h5', custom_objects = {'Quantize': Quantize, 'QuantizeEma': QuantizeEma});
   decoder = tf.keras.models.load_model('decoder.h5');
   resized = cv2.resize(img, img_size) / 255.;
   normalized = (resized - tf.reshape([0.5,0.5,0.5], (1,1,-1))) / tf.reshape([0.5,0.5,0.5], (1,1,-1));
