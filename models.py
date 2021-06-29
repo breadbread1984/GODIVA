@@ -13,12 +13,12 @@ class Quantize(tf.keras.layers.Layer):
   def call(self, inputs):
     samples = tf.reshape(inputs, (-1, self.embed_dim,)); # samples.shape = (n_sample, dim)
     # dist = (X - cluster_mean)^2 = X' * X - 2 * X' * Embed + trace(Embed' * Embed),  dist.shape = (n_sample, n_embed), euler distances to cluster_meanding vectors
-    dist = tf.math.reduce_sum(tf.math.pow(samples,2), axis = 1, keepdims = True) - 2 * tf.linalg.matmul(samples, self.cluster_mean) + tf.math.reduce_sum(tf.math.pow(self.cluster_mean,2), axis = 0, keepdims = True);
+    dist = tf.math.reduce_sum(samples ** 2, axis = 1, keepdims = True) - 2 * tf.linalg.matmul(samples, self.cluster_mean) + tf.math.reduce_sum(self.cluster_mean ** 2, axis = 0, keepdims = True);
     cluster_index = tf.math.argmin(dist, axis = 1); # cluster_index.shape = (n_sample)
     cluster_index = tf.reshape(cluster_index, tf.shape(inputs)[:-1]); # cluster_index.shape = (batch, h, w)
     quantize = tf.nn.embedding_lookup(tf.transpose(self.cluster_mean), cluster_index); # quantize.shape = (batch, h, w, dim)
-    q_loss = tf.math.reduce_mean(tf.math.pow(quantize - tf.stop_gradient(inputs),2));
-    e_loss = tf.math.reduce_mean(tf.math.pow(tf.stop_gradient(quantize) - inputs,2));
+    q_loss = tf.math.reduce_mean((quantize - tf.stop_gradient(inputs)) ** 2);
+    e_loss = tf.math.reduce_mean((tf.stop_gradient(quantize) - inputs) ** 2);
     loss = q_loss + 0.25 * e_loss;
     outputs = inputs + tf.stop_gradient(quantize - inputs);
     return outputs, cluster_index, loss;
@@ -46,7 +46,7 @@ class QuantizeEma(tf.keras.layers.Layer):
   def call(self, inputs):
     samples = tf.reshape(inputs, (-1, self.embed_dim,)); # samples.shape = (n_sample, dim)
     # dist = (X - cluster_mean)^2 = X' * X - 2 * X' * Embed + trace(Embed' * Embed),  dist.shape = (n_sample, n_embed), euler distances to cluster_meanding vectors
-    dist = tf.math.reduce_sum(tf.math.pow(samples,2), axis = 1, keepdims = True) - 2 * tf.linalg.matmul(samples, self.cluster_mean) + tf.math.reduce_sum(tf.math.pow(self.cluster_mean,2), axis = 0, keepdims = True);
+    dist = tf.math.reduce_sum(samples ** 2, axis = 1, keepdims = True) - 2 * tf.linalg.matmul(samples, self.cluster_mean) + tf.math.reduce_sum(self.cluster_mean ** 2, axis = 0, keepdims = True);
     cluster_index = tf.math.argmin(dist, axis = 1); # cluster_index.shape = (n_sample)
     if self.enable_train:
        # NOTE: code book is updated during forward propagation
@@ -63,7 +63,7 @@ class QuantizeEma(tf.keras.layers.Layer):
       self.cluster_mean.assign(cluster_mean);
     cluster_index = tf.reshape(cluster_index, tf.shape(inputs)[:-1]); # cluster_index.shape = (batch, h, w)
     quantize = tf.nn.embedding_lookup(tf.transpose(self.cluster_mean), cluster_index); # quantize.shape = (batch, h, w, dim)
-    loss = tf.math.reduce_mean(tf.math.pow(inputs - tf.stop_gradient(quantize), 2)); # diff.shape = (n_sample,)
+    loss = tf.math.reduce_mean((inputs - tf.stop_gradient(quantize)) ** 2); # diff.shape = (n_sample,)
     outputs = inputs + tf.stop_gradient(quantize - inputs);
     return outputs, cluster_index, loss;
   def set_trainable(self, enable_train = True):
