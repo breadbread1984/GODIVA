@@ -63,5 +63,5 @@ if __name__ == "__main__":
   if len(argv) != 4:
     print('Usage: %s <quantize_type> <train_dir> <test_dir>' % argv[0]);
     exit(1);
-  assert argv[1] in ['normal', 'ema_update'];
+  assert argv[1] in ['original', 'ema_update'];
   main(argv[2], argv[3], argv[1]);
