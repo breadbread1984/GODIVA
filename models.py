@@ -181,7 +181,7 @@ def FullAttention(key_dim, value_dim, num_heads):
 
 def AxialAttention(key_dim, value_dim, num_heads, origin_shape = None, axial_dim = 0):
   # NOTE: this attention can only apply to self attention, but cross attention.
-  # in other words, query_length = key_length must 
+  # in other words, query_length = key_length must hold
   # NOTE: leave one dim as seq_length, merge the other dims with heads.
   # for example key.shape = (batch, heads, h, w, c, dim) and axial_dim = -2
   # key.shape becomes (batch, new_heads = heads * h * c, seq_length = w, dim),
@@ -206,6 +206,7 @@ def AxialAttention(key_dim, value_dim, num_heads, origin_shape = None, axial_dim
   key = tf.keras.layers.Lambda(lambda x, p: tf.transpose(x, p), arguments = {'p': get_perm(origin_shape, axial_dim)})(key);
   key = tf.keras.layers.Lambda(lambda x: tf.reshape(x, (tf.shape(x)[0], -1, tf.shape[-2], tf.shape[-1])))(key); # key.shape = (batch, heads * np.prod(other_dims), axial_dim_length, dim)
   value = tf.keras.layers.Lambda(lambda x, p: tf.transpose(x, p), arguments = {'p': get_perm(origin_shape, axial_dim)})(value);
+  shape = tf.keras.layers.Lambda(lambda x: tf.shape(x))(value);
   value = tf.keras.layers.Lambda(lambda x: tf.reshape(x, (tf.shape(x)[0], -1, tf.shape[-2], tf.shape[-1])))(value); # value.shape = (batch, heads * np.prod(other_dims), axial_dim_length, dim)
   # 1) correlation matrix of query and key
   qk = tf.keras.layers.Lambda(lambda x: tf.linalg.matmul(x[0], x[1], transpose_b = True))([query, key]); # qk.shape = (batch, heads * np.prod(other_dims), query_length = axial_dim_length, key_length = axial_dim_length)
@@ -214,9 +215,15 @@ def AxialAttention(key_dim, value_dim, num_heads, origin_shape = None, axial_dim
   # 2) weighted sum of value elements for each query element
   attention = tf.keras.layers.Dropout()(attention);
   results = tf.keras.layers.Lambda(lambda x: tf.linalg.matmul(x[0], x[1]))([attention, value]); # results.shape = (batch, heads * np.prod(other_dims), query_length = axial_dim_length, value_dim // heads)
-  
+  results = tf.keras.layers.Lambda(lambda x: tf.reshape(x[0], x[1]))([results, shape]); # results.shape = (batch, heads, *other_dims, axial_dim_length, value_dim // heads)
+  def get_inv_perm(origin_shape, axial_dim):
+    perm = get_perm(origin_shape, axial_dim);
+    return np.argsort(perm);
+  results = tf.keras.layers.Lambda(lambda x, p: tf.transpose(x, p), arguments = {'p': get_inv_perm(origin_shape, axial_dim)})(results); # results.shape = (batch, heads, *origin_shape, value_dim // heads)
+  results = tf.keras.layers.Lambda(lambda x: tf.reshape(x, (tf.shape(x)[0], tf.shape(x)[1], -1, tf.shape(x)[-1])))(results); # results.shape = (batch, heads, query_length = np.prod(origin_shape), value_dim // heads)
+  return tf.keras.Model(inputs = (query, key, value, mask), outputs = results);
 
-def MultiHeadAttention(key_dim, value_dim, num_heads, attn_type = 'full'):
+def MultiHeadAttention(key_dim, value_dim, num_heads, attn_type = 'full', origin_shape = None, axial_dim = None):
   assert attn_type in ['full', 'axial', 'sparse'];
   query = tf.keras.Input((None, key_dim,)); # query.shape = (batch, query_length, key_dim)
   key = tf.keras.Input((None, key_dim,)); # key.shape = (batch, key_length, key_dim)
@@ -236,7 +243,7 @@ def MultiHeadAttention(key_dim, value_dim, num_heads, attn_type = 'full'):
   if attn_type == 'full':
     attended = FullAttention(key_dim, value_dim, num_heads)([query_splitted, key_splitted, value_splitted, mask]); # results.shape = (batch, num_heads, query_length, value_dim // num_heads)
   elif attn_type == 'axial':
-    pass;
+    attended = AxialAttention(key_dim, value_dim, num_heads, origin_shape, axial_dim)([query_splitted, key_splitted, value_splitted, mask]); # reults.shape = (batch, num_heads, query_length, value_dim // num_heads)
   elif attn_type == 'sparse':
     pass;
   else:
