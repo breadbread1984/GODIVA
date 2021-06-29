@@ -3,7 +3,7 @@
 import tensorflow as tf;
 from models import VQVAE_Trainer;
 
-def main(quantize_type = 'normal'):
+def main(quantize_type = 'original'):
 
   trainer = VQVAE_Trainer(quantize_type = quantize_type);
   trainer.load_weights('./checkpoints/ckpt');
@@ -18,5 +18,5 @@ if __name__ == "__main__":
   from sys import argv;
   if len(argv) != 2:
     print('Usage: %s <quantize_type>' % argv[0]);
-  assert argv[1] in ['normal', 'ema_update'];
-  main(argv[1]);
+  assert argv[1] in ['original', 'ema_update'];
+  main();
