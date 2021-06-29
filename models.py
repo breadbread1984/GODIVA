@@ -181,7 +181,7 @@ def FullAttention(key_dim, value_dim, num_heads):
 
 def AxialAttention(key_dim, value_dim, num_heads, origin_shape = None, axial_dim = 0):
   # NOTE: this attention can only apply to self attention, but cross attention.
-  # in other words, query_length = key_length
+  # in other words, query_length = key_length must 
   # NOTE: leave one dim as seq_length, merge the other dims with heads.
   # for example key.shape = (batch, heads, h, w, c, dim) and axial_dim = -2
   # key.shape becomes (batch, new_heads = heads * h * c, seq_length = w, dim),
