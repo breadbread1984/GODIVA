@@ -209,36 +209,36 @@ def AxialAttention(key_dim, value_dim, num_heads, drop_rate = 0.5, origin_shape 
   key = tf.keras.Input((num_heads, None, key_dim // num_heads)); # key.shape = (batch, heads, key_length, key_dim // heads)
   value = tf.keras.Input((num_heads, None, value_dim // num_heads)); # value.shape = (batch, heads, key_length, value_dim // heads)
   mask = tf.keras.Input((1, None, None)); # mask.shape = (batch, 1, origin_shape[axial_dim], origin_shape[axial_dim])
-  query = tf.keras.layers.Reshape((num_heads, *origin_shape, key_dim // num_heads))(query);
-  key = tf.keras.layers.Reshape((num_heads, *origin_shape, key_dim // num_heads))(key);
-  value = tf.keras.layers.Reshape((num_heads, *origin_shape, value_dim // num_heads))(value);
+  reshaped_query = tf.keras.layers.Reshape((num_heads, *origin_shape, key_dim // num_heads))(query);
+  reshaped_key = tf.keras.layers.Reshape((num_heads, *origin_shape, key_dim // num_heads))(key);
+  reshaped_value = tf.keras.layers.Reshape((num_heads, *origin_shape, value_dim // num_heads))(value);
   def get_perm(origin_shape, axial_dim):
     dims = np.arange(2 + len(origin_shape) + 1); # batch x heads x *origin_shape x dim
     chosed_dim = 2 + axial_dim if axial_dim >= 0 else 2 + len(origin_shape) + axial_dim;
     index = dims.tolist().index(chosed_dim);
     dims[index], dims[-2] = dims[-2], dims[index];
     return dims;
-  query = tf.keras.layers.Lambda(lambda x, p: tf.transpose(x, p), arguments = {'p': get_perm(origin_shape, axial_dim)})(query);
-  query = tf.keras.layers.Lambda(lambda x: tf.reshape(x, (tf.shape(x)[0], -1, tf.shape[-2], tf.shape[-1])))(query); # query.shape = (batch, heads * np.prod(other_dims), axial_dim_length, dim)
-  key = tf.keras.layers.Lambda(lambda x, p: tf.transpose(x, p), arguments = {'p': get_perm(origin_shape, axial_dim)})(key);
-  key = tf.keras.layers.Lambda(lambda x: tf.reshape(x, (tf.shape(x)[0], -1, tf.shape[-2], tf.shape[-1])))(key); # key.shape = (batch, heads * np.prod(other_dims), axial_dim_length, dim)
-  value = tf.keras.layers.Lambda(lambda x, p: tf.transpose(x, p), arguments = {'p': get_perm(origin_shape, axial_dim)})(value);
-  shape = tf.keras.layers.Lambda(lambda x: tf.shape(x))(value);
-  value = tf.keras.layers.Lambda(lambda x: tf.reshape(x, (tf.shape(x)[0], -1, tf.shape[-2], tf.shape[-1])))(value); # value.shape = (batch, heads * np.prod(other_dims), axial_dim_length, dim)
+  reshaped_query = tf.keras.layers.Lambda(lambda x, p: tf.transpose(x, p), arguments = {'p': get_perm(origin_shape, axial_dim)})(reshaped_query);
+  reshaped_query = tf.keras.layers.Lambda(lambda x: tf.reshape(x, (tf.shape(x)[0], -1, tf.shape(x)[-2], tf.shape(x)[-1])))(reshaped_query); # query.shape = (batch, heads * np.prod(other_dims), axial_dim_length, dim)
+  reshaped_key = tf.keras.layers.Lambda(lambda x, p: tf.transpose(x, p), arguments = {'p': get_perm(origin_shape, axial_dim)})(reshaped_key);
+  reshaped_key = tf.keras.layers.Lambda(lambda x: tf.reshape(x, (tf.shape(x)[0], -1, tf.shape(x)[-2], tf.shape(x)[-1])))(reshaped_key); # key.shape = (batch, heads * np.prod(other_dims), axial_dim_length, dim)
+  reshaped_value = tf.keras.layers.Lambda(lambda x, p: tf.transpose(x, p), arguments = {'p': get_perm(origin_shape, axial_dim)})(reshaped_value);
+  shape = tf.keras.layers.Lambda(lambda x: tf.shape(x))(reshaped_value);
+  reshaped_value = tf.keras.layers.Lambda(lambda x: tf.reshape(x, (tf.shape(x)[0], -1, tf.shape(x)[-2], tf.shape(x)[-1])))(reshaped_value); # value.shape = (batch, heads * np.prod(other_dims), axial_dim_length, dim)
   # 1) correlation matrix of query and key
-  qk = tf.keras.layers.Lambda(lambda x: tf.linalg.matmul(x[0], x[1], transpose_b = True))([query, key]); # qk.shape = (batch, heads * np.prod(other_dims), query_length = axial_dim_length, key_length = axial_dim_length)
+  qk = tf.keras.layers.Lambda(lambda x: tf.linalg.matmul(x[0], x[1], transpose_b = True))([reshaped_query, reshaped_key]); # qk.shape = (batch, heads * np.prod(other_dims), query_length = axial_dim_length, key_length = axial_dim_length)
   logits = tf.keras.layers.Lambda(lambda x, kd: x / tf.math.sqrt(tf.cast(kd, dtype = tf.float32)), arguments = {'kd': key_dim // num_heads})(qk); # logits.shape = (batch, heads * np.prod(other_dims), query_length = axial_dim_length, key_length = axial_dim_length)
   if sparse == False:
     logits = tf.keras.layers.Lambda(lambda x: tf.where(tf.equal(x[1], 1), x[0], -1e9))([logits, mask]);
     attention = tf.keras.layers.Softmax()(logits); # attention.shape = (batch, heads * np.prod(other_dims), query_length = axial_dim_length, key_length = axial_dim_length)
     # 2) weighted sum of value elements for each query element
     attention = tf.keras.layers.Dropout(drop_rate)(attention);
-    results = tf.keras.layers.Lambda(lambda x: tf.linalg.matmul(x[0], x[1]))([attention, value]); # results.shape = (batch, heads * np.prod(other_dims), query_length = axial_dim_length, value_dim // heads)
+    results = tf.keras.layers.Lambda(lambda x: tf.linalg.matmul(x[0], x[1]))([attention, reshaped_value]); # results.shape = (batch, heads * np.prod(other_dims), query_length = axial_dim_length, value_dim // heads)
   else:
     logits = Dense2Sparse()([logits, mask]); # logits.shape = (batch, heads * np.prod(other_dims), query_length = axial_dim_length, key_length = axial_dim_length)
     attention = tf.keras.layers.Lambda(lambda x: tf.sparse.softmax(x))(logits); # attention.shape = (batch, heads * np.prod(other_dims), query_length = axial_dim_length, key_length = axial_dim_length)
     # 2) weighted sum of value elements for each query element
-    results = tf.keras.layers.Lambda(lambda x: tf.sparse.sparse_dense_matmul(x[0], x[1]))([attention, value]); # results.shape = (batch, heads * np.prod(other_dims), query_length = axial_dim_length, value_dim // heads)
+    results = tf.keras.layers.Lambda(lambda x: tf.sparse.sparse_dense_matmul(x[0], x[1]))([attention, reshaped_value]); # results.shape = (batch, heads * np.prod(other_dims), query_length = axial_dim_length, value_dim // heads)
   results = tf.keras.layers.Lambda(lambda x: tf.reshape(x[0], x[1]))([results, shape]); # results.shape = (batch, heads, *other_dims, axial_dim_length, value_dim // heads)
   def get_inv_perm(origin_shape, axial_dim):
     perm = get_perm(origin_shape, axial_dim);
@@ -301,4 +301,11 @@ if __name__ == "__main__":
   value = np.random.normal(size = (4,3,50,100));
   mask = np.random.randint(low = 0, high = 2, size = (4,1,100,50));
   results = fullattention([query,key,value,mask]);
+  print(results.shape);
+  axialattention = AxialAttention(30,300,3,origin_shape = (10,5,3), axial_dim = 1, sparse = False);
+  query = np.random.normal(size = (4,3,150,10));
+  key = np.random.normal(size = (4,3,150,10));
+  value = np.random.normal(size = (4,3,150,100));
+  mask = np.random.randint(low = 0, high = 2, size = (4,1,5,5));
+  results = axialattention([query,key,value,mask]);
   print(results.shape);
