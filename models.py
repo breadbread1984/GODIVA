@@ -320,7 +320,6 @@ def SparseAttention(key_dim, value_dim, num_heads, drop_rate = 0.5, origin_shape
           former = coord_to_idx(former_coord);
           layout[:, latter, former] = 1;
     return layout;
-  
 
 def MultiHeadAttention(key_dim, value_dim, num_heads, attn_type = 'full', origin_shape = (64, 64), axial_dim = -1):
   assert attn_type in ['full', 'axial', 'sparse'];
