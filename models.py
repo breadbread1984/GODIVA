@@ -190,6 +190,7 @@ def FullAttention(key_dim, value_dim, num_heads, drop_rate = 0.5, sparse = False
     attention = tf.keras.layers.Dropout(drop_rate)(attention);
     results = tf.keras.layers.Lambda(lambda x: tf.linalg.matmul(x[0], x[1]))([attention, value]); # results.shape = (batch, heads, query_length, value_dim // heads)
   else:
+    # NOTE: this branch is accessible when tf.sparse.sparse_dense_matmul support tensor over 2-dim
     logits = Dense2Sparse()([logits, mask]); # logits.shape = (batch, num_heads, query_length, key_length)
     attention = tf.keras.layers.Lambda(lambda x: tf.sparse.softmax(x))(logits); # attention.shape = (batch, num_heads, query_length, key_length)
     # 2) weighted sum of value elements for each query element
@@ -235,6 +236,7 @@ def AxialAttention(key_dim, value_dim, num_heads, drop_rate = 0.5, origin_shape 
     attention = tf.keras.layers.Dropout(drop_rate)(attention);
     results = tf.keras.layers.Lambda(lambda x: tf.linalg.matmul(x[0], x[1]))([attention, reshaped_value]); # results.shape = (batch, heads * np.prod(other_dims), query_length = axial_dim_length, value_dim // heads)
   else:
+    # NOTE: this branch is accessible when tf.sparse.sparse_dense_matmul support tensor over 2-dim
     logits = Dense2Sparse()([logits, mask]); # logits.shape = (batch, heads * np.prod(other_dims), query_length = axial_dim_length, key_length = axial_dim_length)
     attention = tf.keras.layers.Lambda(lambda x: tf.sparse.softmax(x))(logits); # attention.shape = (batch, heads * np.prod(other_dims), query_length = axial_dim_length, key_length = axial_dim_length)
     # 2) weighted sum of value elements for each query element
@@ -247,12 +249,57 @@ def AxialAttention(key_dim, value_dim, num_heads, drop_rate = 0.5, origin_shape 
   results = tf.keras.layers.Lambda(lambda x: tf.reshape(x, (tf.shape(x)[0], tf.shape(x)[1], -1, tf.shape(x)[-1])))(results); # results.shape = (batch, heads, query_length = np.prod(origin_shape), value_dim // heads)
   return tf.keras.Model(inputs = (query, key, value, mask), outputs = results);
 
-def SparseAttention(key_dim, value_dim, num_heads,):
+def SparseAttention(key_dim, value_dim, num_heads, drop_rate = 0.5, origin_shape = None, block = 32, local_blocks = 4, causal = True):
   query = tf.keras.Input((num_heads, None, key_dim // num_heads)); # query.shape = (batch, heads, query_length, key_dim // heads)
   key = tf.keras.Input((num_heads, None, key_dim // num_heads)); # key.shape = (batch, heads, key_length, key_dim // heads)
   value = tf.keras.Input((num_heads, None, value_dim // num_heads)); # value.shape = (batch, heads, key_length, value_dim // heads)
-  mask = tf.keras.Input((1, None, None)); # mask.shape = (batch, 1, query_length, key_length)
-  
+  def block_shape():
+    # block_shape = (l, h, w // block)
+    cum_prod = 1;
+    for i in range(len(origin_shape) - 1, 0, -1):
+      cum_prod *= origin_shape[i];
+      if cum_prod > block: break;
+    assert cum_prod % block == 0;
+    return (*origin_shape[:i], cum_prod // block);
+  def idx_to_coord(idx):
+    # convert idx in block_shape to coord
+    shape = block_shape();
+    shape_cum = tuple(np.flip(np.cumprod(np.flip(np.array(shape)))[:-1])) + (1,);
+    coord = list();
+    for i in range(len(shape)):
+      coord.append(idx // shape[i]);
+      idx %= shape_cum[i];
+    return coord;
+  def coord_to_idx(coord):
+    # convert block_shape coord to idx
+    shape = block_shape();
+    shape_cum = tuple(np.flip(np.cumprod(np.flip(np.array(shape)))[:-1])) + (1,);
+    idx = 0;
+    for i in range(len(shape)):
+      idx += coord[i] * shape_cum[i];
+    return idx;
+  def make_layout():
+    assert np.prod(origin_shape) % block == 0;
+    shape = block_shape();
+    num_blocks = np.prod(shape);
+    layout = np.zeros((num_heads, num_blocks, num_blocks));
+    # local layout
+    for latter in range(num_blocks):
+      for former in range(max(0, latter - local_blocks), (latter + 1 if causal == True else min(num_blocks, latter + local_blocks))):
+        # 1) causal case: latter can only look formers backward in time as far as local_blocks number of blocks, can't look forward in time
+        # 2) non causal case: latter can only look formers backward in time as far as local blocks number of blocks,
+        #                     latter can only look forward in time as far as local blocks number of blocks
+        layout[:, latter, former] = 1;
+    # global layout
+    for latter in range(num_blocks):
+      coord = idx_to_coord(latter);
+      for d in range(len(shape) - 1):
+        for i in range(0, (coord[d] + 1 if causal else shape[d])):
+          former_coord = coord;
+          former_coord[d] = i;
+          former = coord_to_idx(former_coord);
+          layout[:, latter, former] = 1;
+    return layout;
 
 def MultiHeadAttention(key_dim, value_dim, num_heads, attn_type = 'full', origin_shape = (64, 64), axial_dim = -1):
   assert attn_type in ['full', 'axial', 'sparse'];
