@@ -282,7 +282,6 @@ def AxialAttention(key_dim, value_dim, num_heads, drop_rate = 0.5, origin_shape 
   results = tf.keras.layers.Lambda(lambda x: tf.reshape(x, (tf.shape(x)[0], tf.shape(x)[1], -1, tf.shape(x)[-1])))(results); # results.shape = (batch, heads, query_length = np.prod(origin_shape), value_dim // heads)
   return tf.keras.Model(inputs = (query, key, value, mask), outputs = results);
 
-
 def BlockSparseAttention(key_dim, value_dim, num_heads, drop_rate = 0.5, origin_shape = None, block = 32, local_blocks = 4, causal = True):
   # NOTE: this attention can only apply to self attention, but cross attention.
   # in other words, query_length = key_length must hold
