@@ -175,21 +175,21 @@ def Dense2Sparse():
   sparse = tf.keras.layers.Lambda(lambda x: tf.sparse.SparseTensor(x[0], values = x[1], dense_shape = tf.cast(tf.shape(x[2]), dtype = tf.int64)))([indices, values, dense]);
   return tf.keras.Model(inputs = (dense, mask), outputs = sparse);
 
-class SparseMatMul(tf.keras.layers.Layer):
+class SparseDenseMatMul(tf.keras.layers.Layer):
   def __init__(self, **kwargs):
-    super(SparseMatMul, self).__init__(**kwargs);
+    super(SparseDenseMatMul, self).__init__(**kwargs);
   def call(self, inputs):
-    a = inputs[0];
-    b = inputs[1];
-    shape = tf.shape(a)[:-2];
-    reshaped_a = tf.sparse.reshape(a, (-1, tf.shape(a)[-2], tf.shape(a)[-1]));
-    reshaped_b = tf.reshape(b, (-1, tf.shape(b)[-2], tf.shape(b)[-1]));
+    a = inputs[0]; # a.shape = (batch, heads, query_length, key_length)
+    b = tf.cast(inputs[1], dtype = tf.float32); # b.shape = (batch, heads, key_length, value_dim)
+    reshaped_a = tf.sparse.reshape(a, (-1, tf.shape(a)[-2], tf.shape(a)[-1])); # reshaped_a.shape = (batch * heads, query_length, key_length)
+    reshaped_b = tf.reshape(b, (-1, tf.shape(b)[-2], tf.shape(b)[-1])); # reshaped_b.shape = (batch * heads, key_length, value_dim)
     def dot(x):
       a = x[0];
       b = x[1];
-      return tf.sparse.sparse_dense_matmul(a,b);
-    results = tf.map_fn(dot, (a,b), fn_output_signature = tf.TensorSpec((*shape, tf.shape(a)[-2], tf.shape(b)[-1]), dtype = tf.float32));
-    results = tf.reshape(results, (*shape, *tf.shape(results)[-2:]));
+      c = tf.sparse.sparse_dense_matmul(a,b);
+      return c; # c.shape = (query_length, value_dim)
+    results = tf.map_fn(dot, (reshaped_a, reshaped_b), dtype = tf.float32);
+    results = tf.reshape(results, (tf.shape(a)[0], tf.shape(a)[1], tf.shape(results)[-2], tf.shape(results)[-1]));
     return results;
 
 def FullAttention(key_dim, value_dim, num_heads, drop_rate = 0.5, sparse = False):
@@ -210,7 +210,7 @@ def FullAttention(key_dim, value_dim, num_heads, drop_rate = 0.5, sparse = False
     # NOTE: this branch is accessible when tf.sparse.sparse_dense_matmul support tensor over 2-dim
     attention = Dense2Sparse()([attention, mask]); # logits.shape = (batch, num_heads, query_length, key_length)
     # 2) weighted sum of value elements for each query element
-    results = SparseMatMul()([attention, value]); # results.shape = (batch * num_heads * query_length, value_dim // num_heads * batch * num_heads)
+    results = SparseDenseMatMul()([attention, value]); # results.shape = (batch * num_heads * query_length, value_dim // num_heads * batch * num_heads)
   return tf.keras.Model(inputs = (query, key, value, mask), outputs = results);
 
 def AxialAttention(key_dim, value_dim, num_heads, drop_rate = 0.5, origin_shape = None, axial_dim = 0, sparse = False):
@@ -255,7 +255,7 @@ def AxialAttention(key_dim, value_dim, num_heads, drop_rate = 0.5, origin_shape 
     # NOTE: this branch is accessible when tf.sparse.sparse_dense_matmul support tensor over 2-dim
     attention = Dense2Sparse()([attention, mask]); # logits.shape = (batch, heads * np.prod(other_dims), query_length = axial_dim_length, key_length = axial_dim_length)
     # 2) weighted sum of value elements for each query element
-    results = SparseMatMul([attention, reshaped_value]); # results.shape = (batch, heads * np.prod(other_dims), query_length = axial_dim_length, value_dim // heads)
+    results = SparseDenseMatMul()([attention, reshaped_value]); # results.shape = (batch, heads * np.prod(other_dims), query_length = axial_dim_length, value_dim // heads)
   results = tf.keras.layers.Lambda(lambda x: tf.reshape(x[0], x[1]))([results, shape]); # results.shape = (batch, heads, *other_dims, axial_dim_length, value_dim // heads)
   def get_inv_perm(origin_shape, axial_dim):
     perm = get_perm(origin_shape, axial_dim);
@@ -265,6 +265,8 @@ def AxialAttention(key_dim, value_dim, num_heads, drop_rate = 0.5, origin_shape 
   return tf.keras.Model(inputs = (query, key, value, mask), outputs = results);
 
 def SparseAttention(key_dim, value_dim, num_heads, drop_rate = 0.5, origin_shape = None, block = 32, local_blocks = 4, causal = True):
+  # NOTE: this attention can only apply to self attention, but cross attention.
+  # in other words, query_length = key_length must hold
   query = tf.keras.Input((num_heads, None, key_dim // num_heads)); # query.shape = (batch, heads, query_length, key_dim // heads)
   key = tf.keras.Input((num_heads, None, key_dim // num_heads)); # key.shape = (batch, heads, key_length, key_dim // heads)
   value = tf.keras.Input((num_heads, None, value_dim // num_heads)); # value.shape = (batch, heads, key_length, value_dim // heads)
@@ -318,6 +320,8 @@ def SparseAttention(key_dim, value_dim, num_heads, drop_rate = 0.5, origin_shape
           former = coord_to_idx(former_coord);
           layout[:, latter, former] = 1;
     return layout;
+  # 1) correlation matrix of query and key
+  
 
 def MultiHeadAttention(key_dim, value_dim, num_heads, attn_type = 'full', origin_shape = (64, 64), axial_dim = -1):
   assert attn_type in ['full', 'axial', 'sparse'];
@@ -367,7 +371,7 @@ if __name__ == "__main__":
   mask = np.random.randint(low = 0, high = 2, size = (4,1,100,50));
   results = fullattention([query,key,value,mask]);
   print(results.shape);
-  axialattention = AxialAttention(30,300,3,origin_shape = (10,5,3), axial_dim = 1, sparse = False);
+  axialattention = AxialAttention(30,300,3,origin_shape = (10,5,3), axial_dim = 1, sparse = True);
   query = np.random.normal(size = (4,3,150,10));
   key = np.random.normal(size = (4,3,150,10));
   value = np.random.normal(size = (4,3,150,100));
