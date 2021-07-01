@@ -192,6 +192,24 @@ class SparseDenseMatMul(tf.keras.layers.Layer):
     results = tf.reshape(results, (tf.shape(a)[0], tf.shape(a)[1], tf.shape(results)[-2], tf.shape(results)[-1]));
     return results;
 
+def Mask(mode = 'all', look_backward_length = None):
+  query = tf.keras.Input((None, None, None)); # seq_length.shape = (batch, num_heads, seq_length, dim)
+  seq_length = tf.keras.layers.Lambda(lambda x: tf.shape(x)[2])(query); # seq_length.shape = ()
+  assert mode in ['all', 'local', 'strided'];
+  if mode == 'all':
+    results = tf.keras.layers.Lambda(lambda x: tf.linalg.band_part(tf.ones((x,x)), -1, 0))(seq_length);
+  elif mode == 'local':
+    results = tf.keras.layers.Lambda(lambda x, n: tf.linalg.band_part(tf.ones((x,x)), tf.math.minimum(x-1,n-1), 0), arguments = {'n': look_backward_length})(seq_length);
+  elif mode == 'strided':
+    y = tf.keras.layers.Lambda(lambda x: tf.tile(tf.reshape(tf.range(x, dtype = tf.int32),(-1,1)),(1,x)))(seq_length);
+    x = tf.keras.layers.Lambda(lambda x: tf.tile(tf.reshape(tf.range(x, dtype = tf.int32),(1,-1)),(x,1)))(seq_length);
+    diff = tf.keras.layers.Lambda(lambda x, n: tf.cast(tf.math.equal(tf.math.floormod(x[0] - x[1], n), 0), dtype = tf.float32), arguments = {'n': look_backward_length})([y,x]);
+    results = tf.keras.layers.Lambda(lambda x: tf.math.minimum(x, tf.linalg.band_part(tf.ones_like(x), -1, 0)))(diff);
+  else:
+    raise Exception('invalid sparse mode');
+  results = tf.keras.layers.Lambda(lambda x: tf.tile(tf.reshape(x[0], (1, 1, tf.shape(x[0])[0], tf.shape(x[0])[1])), (tf.shape(x[1])[0],1,1,1)))([results, query]); # results.shape = (batch, 1, seq_length, seq_length)
+  return tf.keras.Model(inputs = query, outputs = results);
+
 def FullAttention(key_dim, value_dim, num_heads, drop_rate = 0.5, sparse = False):
   query = tf.keras.Input((num_heads, None, key_dim // num_heads)); # query.shape = (batch, heads, query_length, key_dim // heads)
   key = tf.keras.Input((num_heads, None, key_dim // num_heads)); # key.shape = (batch, heads, key_length, key_dim // heads)
@@ -264,64 +282,15 @@ def AxialAttention(key_dim, value_dim, num_heads, drop_rate = 0.5, origin_shape 
   results = tf.keras.layers.Lambda(lambda x: tf.reshape(x, (tf.shape(x)[0], tf.shape(x)[1], -1, tf.shape(x)[-1])))(results); # results.shape = (batch, heads, query_length = np.prod(origin_shape), value_dim // heads)
   return tf.keras.Model(inputs = (query, key, value, mask), outputs = results);
 
-def SparseAttention(key_dim, value_dim, num_heads, drop_rate = 0.5, origin_shape = None, block = 32, local_blocks = 4, causal = True):
+
+def BlockSparseAttention(key_dim, value_dim, num_heads, drop_rate = 0.5, origin_shape = None, block = 32, local_blocks = 4, causal = True):
   # NOTE: this attention can only apply to self attention, but cross attention.
   # in other words, query_length = key_length must hold
   query = tf.keras.Input((num_heads, None, key_dim // num_heads)); # query.shape = (batch, heads, query_length, key_dim // heads)
   key = tf.keras.Input((num_heads, None, key_dim // num_heads)); # key.shape = (batch, heads, key_length, key_dim // heads)
   value = tf.keras.Input((num_heads, None, value_dim // num_heads)); # value.shape = (batch, heads, key_length, value_dim // heads)
-  def block_shape():
-    # block_shape = (l, h, w // block)
-    cum_prod = 1;
-    for i in range(len(origin_shape) - 1, 0, -1):
-      cum_prod *= origin_shape[i];
-      if cum_prod > block: break;
-    assert cum_prod % block == 0;
-    return (*origin_shape[:i], cum_prod // block);
-  def idx_to_coord(idx):
-    # convert idx in block_shape to coord
-    shape = block_shape();
-    shape_cum = tuple(np.flip(np.cumprod(np.flip(np.array(shape)))[:-1])) + (1,);
-    coord = list();
-    for i in range(len(shape)):
-      coord.append(idx // shape[i]);
-      idx %= shape_cum[i];
-    return coord;
-  def coord_to_idx(coord):
-    # convert block_shape coord to idx
-    shape = block_shape();
-    shape_cum = tuple(np.flip(np.cumprod(np.flip(np.array(shape)))[:-1])) + (1,);
-    idx = 0;
-    for i in range(len(shape)):
-      idx += coord[i] * shape_cum[i];
-    return idx;
-  def make_layout():
-    assert np.prod(origin_shape) % block == 0;
-    shape = block_shape();
-    num_blocks = np.prod(shape);
-    layout = np.zeros((num_heads, num_blocks, num_blocks));
-    # local layout
-    for latter in range(num_blocks):
-      for former in range(max(0, latter - local_blocks), (latter + 1 if causal == True else min(num_blocks, latter + local_blocks))):
-        # 1) causal case: latter can only look formers backward in time as far as local_blocks number of blocks, can't look forward in time
-        # 2) non causal case: latter can only look formers backward in time as far as local blocks number of blocks,
-        #                     latter can only look forward in time as far as local blocks number of blocks
-        layout[:, latter, former] = 1;
-    # global layout
-    for latter in range(num_blocks):
-      latter_coord = idx_to_coord(latter);
-      # calculate all visible formers
-      for d in range(len(shape) - 1):
-        for i in range(0, (latter_coord[d] + 1 if causal else shape[d])):
-          # 1) causal case: latter can only look formers backward in time in every dimension of the block
-          # 2) non causal case: latter can look forward and backward all elements in every dimension
-          former_coord = latter_coord.copy();
-          former_coord[d] = i;
-          former = coord_to_idx(former_coord);
-          layout[:, latter, former] = 1;
-    return layout;
-  # 1) correlation matrix of query and key
   
+  # TODO:
 
 def MultiHeadAttention(key_dim, value_dim, num_heads, attn_type = 'full', origin_shape = (64, 64), axial_dim = -1):
   assert attn_type in ['full', 'axial', 'sparse'];
@@ -378,3 +347,10 @@ if __name__ == "__main__":
   mask = np.random.randint(low = 0, high = 2, size = (4,1,5,5));
   results = axialattention([query,key,value,mask]);
   print(results.shape);
+  query = np.random.normal(size = (4, 3, 10, 10));
+  mask = Mask('all', 3);
+  print(mask(query));
+  mask = Mask('local', 3);
+  print(mask(query));
+  mask = Mask('strided', 3);
+  print(mask(query));
