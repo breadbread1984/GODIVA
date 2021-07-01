@@ -200,16 +200,15 @@ def FullAttention(key_dim, value_dim, num_heads, drop_rate = 0.5, sparse = False
   # 1) correlation matrix of query and key
   qk = tf.keras.layers.Lambda(lambda x: tf.linalg.matmul(x[0], x[1], transpose_b = True))([query, key]); # qk.shape = (batch, heads, query_length, key_length)
   logits = tf.keras.layers.Lambda(lambda x, kd: x / tf.math.sqrt(tf.cast(kd, dtype = tf.float32)), arguments = {'kd': key_dim // num_heads})(qk); # logits.shape = (batch, heads, query_length, key_length)
+  logits = tf.keras.layers.Lambda(lambda x: tf.where(tf.equal(x[1], 1), x[0], -1e9))([logits, mask]);
+  attention = tf.keras.layers.Softmax()(logits); # attention.shape = (batch, heads, query_length, key_length)
   if sparse == False:
-    logits = tf.keras.layers.Lambda(lambda x: tf.where(tf.equal(x[1], 1), x[0], -1e9))([logits, mask]);
-    attention = tf.keras.layers.Softmax()(logits); # attention.shape = (batch, heads, query_length, key_length)
     # 2) weighted sum of value elements for each query element
     attention = tf.keras.layers.Dropout(drop_rate)(attention);
     results = tf.keras.layers.Lambda(lambda x: tf.linalg.matmul(x[0], x[1]))([attention, value]); # results.shape = (batch, heads, query_length, value_dim // heads)
   else:
     # NOTE: this branch is accessible when tf.sparse.sparse_dense_matmul support tensor over 2-dim
-    logits = Dense2Sparse()([logits, mask]); # logits.shape = (batch, num_heads, query_length, key_length)
-    attention = tf.keras.layers.Lambda(lambda x: tf.sparse.softmax(x))(logits); # attention.shape = (batch, num_heads, query_length, key_length)
+    attention = Dense2Sparse()([attention, mask]); # logits.shape = (batch, num_heads, query_length, key_length)
     # 2) weighted sum of value elements for each query element
     results = SparseMatMul()([attention, value]); # results.shape = (batch * num_heads * query_length, value_dim // num_heads * batch * num_heads)
   return tf.keras.Model(inputs = (query, key, value, mask), outputs = results);
@@ -246,16 +245,15 @@ def AxialAttention(key_dim, value_dim, num_heads, drop_rate = 0.5, origin_shape 
   # 1) correlation matrix of query and key
   qk = tf.keras.layers.Lambda(lambda x: tf.linalg.matmul(x[0], x[1], transpose_b = True))([reshaped_query, reshaped_key]); # qk.shape = (batch, heads * np.prod(other_dims), query_length = axial_dim_length, key_length = axial_dim_length)
   logits = tf.keras.layers.Lambda(lambda x, kd: x / tf.math.sqrt(tf.cast(kd, dtype = tf.float32)), arguments = {'kd': key_dim // num_heads})(qk); # logits.shape = (batch, heads * np.prod(other_dims), query_length = axial_dim_length, key_length = axial_dim_length)
+  logits = tf.keras.layers.Lambda(lambda x: tf.where(tf.equal(x[1], 1), x[0], -1e9))([logits, mask]);
+  attention = tf.keras.layers.Softmax()(logits); # attention.shape = (batch, heads * np.prod(other_dims), query_length = axial_dim_length, key_length = axial_dim_length)
   if sparse == False:
-    logits = tf.keras.layers.Lambda(lambda x: tf.where(tf.equal(x[1], 1), x[0], -1e9))([logits, mask]);
-    attention = tf.keras.layers.Softmax()(logits); # attention.shape = (batch, heads * np.prod(other_dims), query_length = axial_dim_length, key_length = axial_dim_length)
     # 2) weighted sum of value elements for each query element
     attention = tf.keras.layers.Dropout(drop_rate)(attention);
     results = tf.keras.layers.Lambda(lambda x: tf.linalg.matmul(x[0], x[1]))([attention, reshaped_value]); # results.shape = (batch, heads * np.prod(other_dims), query_length = axial_dim_length, value_dim // heads)
   else:
     # NOTE: this branch is accessible when tf.sparse.sparse_dense_matmul support tensor over 2-dim
-    logits = Dense2Sparse()([logits, mask]); # logits.shape = (batch, heads * np.prod(other_dims), query_length = axial_dim_length, key_length = axial_dim_length)
-    attention = tf.keras.layers.Lambda(lambda x: tf.sparse.softmax(x))(logits); # attention.shape = (batch, heads * np.prod(other_dims), query_length = axial_dim_length, key_length = axial_dim_length)
+    attention = Dense2Sparse()([attention, mask]); # logits.shape = (batch, heads * np.prod(other_dims), query_length = axial_dim_length, key_length = axial_dim_length)
     # 2) weighted sum of value elements for each query element
     results = SparseMatMul([attention, reshaped_value]); # results.shape = (batch, heads * np.prod(other_dims), query_length = axial_dim_length, value_dim // heads)
   results = tf.keras.layers.Lambda(lambda x: tf.reshape(x[0], x[1]))([results, shape]); # results.shape = (batch, heads, *other_dims, axial_dim_length, value_dim // heads)
