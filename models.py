@@ -192,7 +192,8 @@ class MaskedDenseMatMul(tf.keras.layers.Layer):
       a_row = a[i:i+1,...]; # a_row.shape = (1, key_dim // heads);
       mask_row = tf.expand_dims(mask[i,...], axis = -1); # mask_row.shape = (key_length, 1);
       tiled_mask_row = tf.tile(mask_row, (1, tf.shape(b)[-1])); # tiled_mask_row.shape = (key_length, key_dim // heads)
-      indices = tf.where(tf.cast(tiled_mask_row, dtype = tf.int32));
+      indices = tf.where(tf.cast(tiled_mask_row, dtype = tf.int32)); # indices.shape = (none-zero num, 2)
+      # NOTE: b.shape = (key_length, key_dim // heads)
       values = tf.gather_nd(b, indices);
       masked_b = tf.sparse.SparseTensor(indices, values = values, dense_shape = tf.cast(tf.shape(b), dtype = tf.int64)); # masked_b.shape = (key_length, key_dim // heads)
       qk = tf.sparse.sparse_dense_matmul(a_row, tf.sparse.transpose(masked_b)); # qk.shape = (1, key_length)
@@ -378,25 +379,17 @@ def MultiHeadAttention(key_dim, value_dim, num_heads, attn_type = 'full', sparse
 
 if __name__ == "__main__":
   import numpy as np;
-  dense2sparse = Dense2Sparse();
-  dense = np.random.normal(size = (4,10,20,20));
-  mask = np.random.randint(low = 0, high = 2, size = (4,1,1,20));
-  sparse = dense2sparse([dense, mask]);
-  print(sparse.shape);
-  mask = np.random.randint(low = 0, high = 2, size = (4,1,20,20));
-  sparse = dense2sparse([dense, mask]);
-  print(sparse.shape);
   fullattention = FullAttention(30,300,3,sparse = 'local');
-  query = np.random.normal(size = (4,3,100,10));
+  query = np.random.normal(size = (4,3,50,10));
   key = np.random.normal(size = (4,3,50,10));
   value = np.random.normal(size = (4,3,50,100));
   mask = np.random.randint(low = 0, high = 2, size = (4,1,100,50));
-  results = fullattention([query,key,value,mask]);
+  results = fullattention([query,key,value]);
   print(results.shape);
   axialattention = AxialAttention(30,300,3,origin_shape = (10,5,3), axial_dim = 1, sparse = 'strided');
   query = np.random.normal(size = (4,3,150,10));
   key = np.random.normal(size = (4,3,150,10));
   value = np.random.normal(size = (4,3,150,100));
   mask = np.random.randint(low = 0, high = 2, size = (4,1,5,5));
-  results = axialattention([query,key,value,mask]);
+  results = axialattention([query,key,value]);
   print(results.shape);
