@@ -177,7 +177,7 @@ def Dense2Sparse():
 
 class MaskedDenseMatMul(tf.keras.layers.Layer):
   def __init__(self, **kwargs):
-    super(MaskedDenseMatMul, self).__init__(**kwargs):
+    super(MaskedDenseMatMul, self).__init__(**kwargs);
   def call(self, inputs):
     a = inputs[0]; # a.shape = (batch, heads, query_length, key_dim // heads)
     b = inputs[1]; # b.shape = (batch, heads, key_length, key_dim // heads)
@@ -185,20 +185,27 @@ class MaskedDenseMatMul(tf.keras.layers.Layer):
     reshaped_a = tf.reshape(a, (-1, tf.shape(a)[-2], tf.shape(a)[-1])); # reshaped_a.shape = (batch * heads, query_length, key_dim // heads)
     reshaped_b = tf.reshape(b, (-1, tf.shape(b)[-2], tf.shape(b)[-1])); # reshaped_b.shape = (batch * heads, key_length, key_dim // heads)
     tiled_mask = tf.tile(mask, (1,tf.shape(b)[1],1,1)); # mask.shape = (batch, heads, query_length, key_length)
-    reshaped_mask = tf.reshape(mask, (-1, tf.shape(tiled_mask)[-2], tf.shape(tiled_mask)[-1])); # reshaped_mask.shape = (batch * heads, query_length, key_length)
-    def row_slice(i, a, b, mask):
+    reshaped_mask = tf.reshape(tiled_mask, (-1, tf.shape(tiled_mask)[-2], tf.shape(tiled_mask)[-1])); # reshaped_mask.shape = (batch * heads, query_length, key_length)
+    def stop_cond(i, a, b, mask, results):
+      return tf.math.less(i, a.shape[0]);
+    def row_slice(i, a, b, mask, results):
       a_row = a[i:i+1,...]; # a_row.shape = (1, key_dim // heads);
       mask_row = tf.expand_dims(mask[i,...], axis = -1); # mask_row.shape = (key_length, 1);
       tiled_mask_row = tf.tile(mask_row, (1, tf.shape(b)[-1])); # tiled_mask_row.shape = (key_length, key_dim // heads)
       indices = tf.where(tf.cast(tiled_mask_row, dtype = tf.int32));
       values = tf.gather_nd(b, indices);
       masked_b = tf.sparse.SparseTensor(indices, values = values, dense_shape = tf.cast(tf.shape(b), dtype = tf.int64)); # masked_b.shape = (key_length, key_dim // heads)
-      qk = tf.sparse.sparse_dense_matmul(a, tf.sparse.transpose(masked_b)); # qk.shape = (1, key_length)
+      qk = tf.sparse.sparse_dense_matmul(a_row, tf.sparse.transpose(masked_b)); # qk.shape = (1, key_length)
+      results = tf.concat([results, qk], axis = 0); # results.shape = (n, key_length)
     def dot(x):
       a = x[0]; # a.shape = (query_length, key_dim // heads)
-      mask = x[1]; # mask.shape = (query_length, key_length)
-      tf.map_fn()
-      # TODO
+      b = x[1]; # b.shape = (key_length, key_dim // heads)
+      mask = x[2]; # mask.shape = (query_length, key_length)
+      i, a, b, mask, results = tf.while_loop(stop_cond, row_slice, (tf.constant(0, dtype = tf.int32), a, b, mask, tf.zeros((0, tf.shape(b)[0]), dtype = tf.float32)));
+      return results; # results.shape = (query_length. key_length)
+    results = tf.map_fn(dot, (reshaped_a, reshaped_b, reshaped_mask), dtype = tf.float32); # results.shape = (batch * heads, query_length, key_length)
+    results = tf.reshape(results, (tf.shape(a)[0], tf.shape(a)[1], tf.shape(results)[-2], tf.shape(results)[-1])); # results.shape = (batch, heads, query_length, key_length)
+    return results;
 
 class SparseDenseMatMul(tf.keras.layers.Layer):
   def __init__(self, **kwargs):
@@ -371,10 +378,8 @@ if __name__ == "__main__":
   mask = np.random.randint(low = 0, high = 2, size = (4,1,5,5));
   results = axialattention([query,key,value,mask]);
   print(results.shape);
-  query = np.random.normal(size = (4, 3, 10, 10));
-  mask = Mask('all', 3);
-  print(mask(query));
-  mask = Mask('local', 3);
-  print(mask(query));
-  mask = Mask('strided', 3);
-  print(mask(query));
+  mask = Mask('local', 5);
+  maskmatmul = MaskedDenseMatMul();
+  results = maskmatmul([query, key, mask(query)]);
+  print(results.shape);
+  
