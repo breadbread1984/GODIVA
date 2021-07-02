@@ -197,13 +197,15 @@ class MaskedDenseMatMul(tf.keras.layers.Layer):
       masked_b = tf.sparse.SparseTensor(indices, values = values, dense_shape = tf.cast(tf.shape(b), dtype = tf.int64)); # masked_b.shape = (key_length, key_dim // heads)
       qk = tf.sparse.sparse_dense_matmul(a_row, tf.sparse.transpose(masked_b)); # qk.shape = (1, key_length)
       results = tf.concat([results, qk], axis = 0); # results.shape = (n, key_length)
+      i += 1;
+      return i, a, b, mask, results;
     def dot(x):
       a = x[0]; # a.shape = (query_length, key_dim // heads)
       b = x[1]; # b.shape = (key_length, key_dim // heads)
       mask = x[2]; # mask.shape = (query_length, key_length)
       i, a, b, mask, results = tf.while_loop(cond = stop_cond, body = row_slice,
                                              loop_vars = [tf.constant(0), a, b, mask, tf.zeros((0, tf.shape(b)[0]), dtype = tf.float32)],
-                                             shape_invariants = [tf.TensorShape([]), a.shape, b.shape, mask.shape, tf.TensorShape([None, tf.shape(b)[0]])]);
+                                             shape_invariants = [tf.TensorShape([]), a.shape, b.shape, mask.shape, tf.TensorShape([None, tf.shape(b)[0]])],);
       return results; # results.shape = (query_length. key_length)
     results = tf.map_fn(dot, (reshaped_a, reshaped_b, reshaped_mask), dtype = tf.float32); # results.shape = (batch * heads, query_length, key_length)
     results = tf.reshape(results, (tf.shape(a)[0], tf.shape(a)[1], tf.shape(results)[-2], tf.shape(results)[-1])); # results.shape = (batch, heads, query_length, key_length)
@@ -380,8 +382,7 @@ if __name__ == "__main__":
   mask = np.random.randint(low = 0, high = 2, size = (4,1,5,5));
   results = axialattention([query,key,value,mask]);
   print(results.shape);
-  mask = Mask('local', 5);
+  _mask = Mask('local', 5);
   maskmatmul = MaskedDenseMatMul();
-  results = maskmatmul([query, key, mask(query)]);
+  results = maskmatmul([query, key, _mask(query)]);
   print(results.shape);
-  
