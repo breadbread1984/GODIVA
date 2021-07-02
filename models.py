@@ -2,6 +2,7 @@
 
 import numpy as np;
 import tensorflow as tf;
+from blocksparse import BlocksparseTransformer;
 
 class Quantize(tf.keras.layers.Layer):
   def __init__(self, embed_dim = 128, n_embed = 10000, **kwargs):
@@ -336,14 +337,72 @@ def AxialAttention(key_dim, value_dim, num_heads, drop_rate = 0.5, origin_shape 
   results = tf.keras.layers.Lambda(lambda x: tf.reshape(x, (tf.shape(x)[0], tf.shape(x)[1], -1, tf.shape(x)[-1])))(results); # results.shape = (batch, heads, query_length = np.prod(origin_shape), value_dim // heads)
   return tf.keras.Model(inputs = (query, key, value), outputs = results);
 
-def BlockSparseAttention(key_dim, value_dim, num_heads, drop_rate = 0.5, origin_shape = None, block = 32, local_blocks = 4, causal = True):
-  # NOTE: this attention can only apply to self attention, but cross attention.
-  # in other words, query_length = key_length must hold
-  query = tf.keras.Input((num_heads, None, key_dim // num_heads)); # query.shape = (batch, heads, query_length, key_dim // heads)
-  key = tf.keras.Input((num_heads, None, key_dim // num_heads)); # key.shape = (batch, heads, key_length, key_dim // heads)
-  value = tf.keras.Input((num_heads, None, value_dim // num_heads)); # value.shape = (batch, heads, key_length, value_dim // heads)
-  
-  # TODO:
+class BlockSparseAttention(tf.keras.Model):
+  def __init__(self, num_heads, origin_shape = None, block = 32, local_blocks = 4, causal = True, **kwargs):
+    super(BlockSparseAttention, self).__init__(**kwargs);
+    self.origin_shape = origin_shape;
+    self.block = block;
+    self.local_blocks = local_blocks;
+    self.causal = causal;
+    self.block_transformer = BlocksparseTransformer(self.make_layout(), block_size = block, mask_callback = self.get_mask, num_heads);
+  def block_shape(self,):
+    # block_shape = (l, h, w // block)
+    cum_prod = 1;
+    for i in range(len(self.origin_shape) - 1, 0, -1):
+      cum_prod *= self.origin_shape[i];
+      if cum_prod > self.block: break;
+    assert cum_prod % self.block == 0;
+    return (*self.origin_shape[:i], cum_prod // self.block);
+  def idx_to_coord(self, idx):
+    # convert idx in block_shape to coord
+    shape = self.block_shape();
+    shape_cum = tuple(np.flip(np.cumprod(np.flip(np.array(shape)))[:-1])) + (1,);
+    coord = list();
+    for i in range(len(shape)):
+      coord.append(idx // shape[i]);
+      idx %= shape_cum[i];
+    return coord;
+  def coord_to_idx(self, coord):
+    # convert block_shape coord to idx
+    shape = self.block_shape();
+    shape_cum = tuple(np.flip(np.cumprod(np.flip(np.array(shape)))[:-1])) + (1,);
+    idx = 0;
+    for i in range(len(shape)):
+      idx += coord[i] * shape_cum[i];
+    return idx;
+  def make_layout(self, ):
+    assert np.prod(self.origin_shape) % self.block == 0;
+    shape = self.block_shape();
+    num_blocks = np.prod(shape);
+    layout = np.zeros((num_blocks, num_blocks));
+    # local layout
+    for latter in range(num_blocks):
+      for former in range(max(0, latter - self.local_blocks), (latter + 1 if self.causal == True else min(num_blocks, latter + self.local_blocks))):
+        # 1) causal case: latter can only look formers backward in time as far as local_blocks number of blocks, can't look forward in time
+        # 2) non causal case: latter can only look formers backward in time as far as local blocks number of blocks,
+        #                     latter can only look forward in time as far as local blocks number of blocks
+        layout[latter, former] = 1;
+    # global layout
+    for latter in range(num_blocks):
+      latter_coord = self.idx_to_coord(latter);
+      # calculate all visible formers
+      for d in range(len(shape) - 1):
+        for i in range(0, (latter_coord[d] + 1 if self.causal else shape[d])):
+          # 1) causal case: latter can only look formers backward in time in every dimension of the block
+          # 2) non causal case: latter can look forward and backward all elements in every dimension
+          former_coord = latter_coord.copy();
+          former_coord[d] = i;
+          former = self.coord_to_idx(former_coord);
+          layout[latter, former] = 1;
+    return layout;
+  def get_mask(self, block_shape, head_idx, query_idx, key_idx, block_idx):
+    mask = np.tril(np.ones(block_shape)).astype(np.bool);
+    # TODO
+  def call(self, inputs):
+    query = inputs[0]; # query.shape = (batch, heads, query_length, key_dim // heads)
+    key = inputs[1]; # key.shape = (batch, heads, key_length, key_dim // heads)
+    value = inputs[2]; # value.shape = (batch, heads, key_length, value_dim // heads)
+    # TODO
 
 def MultiHeadAttention(key_dim, value_dim, num_heads, attn_type = 'full', sparse = None, look_backward_length = 5, origin_shape = (64, 64), axial_dim = -1):
   assert attn_type in ['full', 'axial', 'sparse'];
