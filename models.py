@@ -338,13 +338,14 @@ def AxialAttention(key_dim, value_dim, num_heads, drop_rate = 0.5, origin_shape 
   return tf.keras.Model(inputs = (query, key, value), outputs = results);
 
 class BlockSparseAttention(tf.keras.Model):
-  def __init__(self, num_heads, origin_shape = None, block = 32, local_blocks = 4, causal = True, **kwargs):
+  def __init__(self, num_heads, origin_shape = None, block = 32, local_blocks = 4, causal = True, sparse = 'local', look_backward_length = 5, **kwargs):
     super(BlockSparseAttention, self).__init__(**kwargs);
     self.origin_shape = origin_shape;
     self.block = block;
     self.local_blocks = local_blocks;
     self.causal = causal;
-    self.block_transformer = BlocksparseTransformer(self.make_layout(), block_size = block, mask_callback = self.get_mask, num_heads);
+    self.num_heads = num_heads;
+    self.block_transformer = BlocksparseTransformer(self.make_layout(), block_size = block, mask_callback = self.get_callback(sparse, look_backward_length), num_heads);
   def block_shape(self,):
     # block_shape = (l, h, w // block)
     cum_prod = 1;
@@ -395,13 +396,23 @@ class BlockSparseAttention(tf.keras.Model):
           former = self.coord_to_idx(former_coord);
           layout[latter, former] = 1;
     return layout;
-  def get_mask(self, block_shape, head_idx, query_idx, key_idx, block_idx):
-    mask = np.tril(np.ones(block_shape)).astype(np.bool);
-    # TODO
+  def get_callback(self, sparse, look_backward_length = None):
+    def get_mask(self, block_shape, head_idx, query_idx, key_idx, block_idx):
+      if sparse in ['all', 'strided', 'fixed']:
+        return np.tril(np.ones(block_shape)).astype(np.bool);
+      elif sparse == 'local':
+        return (np.tril(np.ones(block_shape)) - np.tril(np.ones(block_shape), -look_backward_length)).astype(np.bool);
+      else:
+        raise Exception('unknown sparse mode!');
+    return get_mask
   def call(self, inputs):
-    query = inputs[0]; # query.shape = (batch, heads, query_length, key_dim // heads)
-    key = inputs[1]; # key.shape = (batch, heads, key_length, key_dim // heads)
-    value = inputs[2]; # value.shape = (batch, heads, key_length, value_dim // heads)
+    query = inputs[0]; # query.shape = (batch, query_length, key_dim)
+    key = inputs[1]; # key.shape = (batch, key_length, key_dim)
+    value = inputs[2]; # value.shape = (batch, key_length, value_dim)
+    qk = self.block_transformer.query_key_op(query, key);
+    attention = self.block_transformer.masked_softmax(qk, scale = 1. / tf.math.sqrt(tf.shape(query)[-1] / self.num_heads));
+    results = self.block_transformer.weight_value_op(attention, value);
+    
     # TODO
 
 def MultiHeadAttention(key_dim, value_dim, num_heads, attn_type = 'full', sparse = None, look_backward_length = 5, origin_shape = (64, 64), axial_dim = -1):
