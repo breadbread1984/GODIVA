@@ -381,17 +381,28 @@ if __name__ == "__main__":
   key = np.random.normal(size = (4,3,50,10));
   value = np.random.normal(size = (4,3,50,100));
   mask = np.random.randint(low = 0, high = 2, size = (4,1,150,50));
-  fullattention = FullAttention(30,300,3,sparse = None);
+  fullattention = FullAttention(30,300,3,sparse = None); # cross attention
   results = fullattention([query,key,value,mask]);
-  print(results.shape);
+  print('cross attention', results.shape);
   query = np.random.normal(size = (4,3,50,10));
-  fullattention = FullAttention(30,300,3,sparse = 'local');
+  fullattention = FullAttention(30,300,3,sparse = 'all'); # self attention
   results = fullattention([query,key,value]);
-  print(results.shape);
-  axialattention = AxialAttention(30,300,3,origin_shape = (10,5,3), axial_dim = 1, sparse = 'strided');
+  print('self attention all', results.shape);
+  fullattention = FullAttention(30,300,3,sparse = 'local'); # self attention
+  results = fullattention([query,key,value]);
+  print('self attention local', results.shape);
+  fullattention = FullAttention(30,300,3,sparse = 'strided'); # self attention
+  results = fullattention([query,key,value]);
+  print('self attention strided', results.shape);
   query = np.random.normal(size = (4,3,150,10));
   key = np.random.normal(size = (4,3,150,10));
   value = np.random.normal(size = (4,3,150,100));
-  mask = np.random.randint(low = 0, high = 2, size = (4,1,5,5));
+  axialattention = AxialAttention(30,300,3,origin_shape = (10,5,3), axial_dim = 1, sparse = 'all');
   results = axialattention([query,key,value]);
-  print(results.shape);
+  print('self attention all', results.shape);
+  axialattention = AxialAttention(30,300,3,origin_shape = (10,5,3), axial_dim = 1, sparse = 'local');
+  results = axialattention([query,key,value]);
+  print('self attention local', results.shape);
+  axialattention = AxialAttention(30,300,3,origin_shape = (10,5,3), axial_dim = 1, sparse = 'strided');
+  results = axialattention([query,key,value]);
+  print('self attention strided', results.shape);
