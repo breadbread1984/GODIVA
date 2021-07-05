@@ -341,19 +341,23 @@ def SparseAttention(key_dim, value_dim, num_heads, drop_rate = 0.5, origin_shape
           if former >= num_blocks:
             print(former_coord);
           layout[latter, former] = True;
-    layout = np.reshape(layout, (1,1,num_blocks, num_blocks)); # layout.shape = (1, 1, query_length, key_length)
+    layout = np.reshape(layout, (1,1,num_blocks,num_blocks)); # layout.shape = (1, 1, query_length, key_length)
     return layout;
   query = tf.keras.Input((num_heads, np.prod(origin_shape), key_dim // num_heads)); # query.shape = (batch, heads, query_length, key_dim // heads)
   key = tf.keras.Input((num_heads, np.prod(origin_shape), key_dim // num_heads)); # key.shape = (batch, heads, key_length, key_dim // heads)
   value = tf.keras.Input((num_heads, np.prod(origin_shape), value_dim // num_heads)); # value.shape = (batch, heads, key_length, value_dim // heads)
   mask = tf.keras.layers.Lambda(lambda x, m: tf.tile(m,(tf.shape(x)[0],1,1,1)), arguments = {'m': make_layout()})(query); # mask.shape = (batch, 1, query_length, key_length)
-  # TODO
-  
-  return mask;
+  qk = MaskedDenseMatMul()([query, key, mask]);
+  logits = tf.keras.layers.Lambda(lambda x, kd: x / tf.math.sqrt(tf.cast(kd, dtype = tf.float32)), arguments = {'kd': key_dim // num_heads})(qk); # logits.shape = (batch, heads, query_length, key_length)
+  logits = Dense2Sparse()([logits, mask]); # logits.shape = (batch, heads, query_length, key_length)
+  attention = tf.keras.layers.Lambda(lambda x: tf.sparse.softmax(x))(logits); # attention.shape = (batch, num_heads, query_length, key_length)
+  attention = SparseDropout(drop_rate = drop_rate)(attention); # attention.shape = (batch, num_heads, query_length, key_length)
+  # 2) weighted sum of value elements for each query element
+  results = SparseDenseMatMul()([attention, value]); # results.shape = (batch, num_heads, query_length, value_dim // num_heads)
+  return tf.keras.Model(inputs = (query, key, value), outputs = results);
 
-def MultiHeadAttention(key_dim, value_dim, num_heads, attn_type = 'full', sparse = None, look_backward_length = 5, local_context_length = 3, origin_shape = (64, 64), axial_dim = -1):
+def MultiHeadAttention(key_dim, value_dim, num_heads, attn_type = 'full', **kwargs):
   assert attn_type in ['full', 'axial', 'sparse'];
-  assert sparse in ['strided_x', 'strided_y', 'fixed_x', 'fixed_y'];
   query = tf.keras.Input((None, key_dim,)); # query.shape = (batch, query_length, key_dim)
   key = tf.keras.Input((None, key_dim,)); # key.shape = (batch, key_length, key_dim)
   value = tf.keras.Input((None, value_dim,)); # value.shape = (batch, key_length, value_dim)
@@ -369,11 +373,11 @@ def MultiHeadAttention(key_dim, value_dim, num_heads, attn_type = 'full', sparse
   value_splitted = tf.keras.layers.Reshape((-1, num_heads, value_dim // num_heads))(value_dense); # value_splitted.shape = (batch, key_length, num_heads, value_dim // num_heads)
   value_splitted = tf.keras.layers.Lambda(lambda x: tf.transpose(x, (0, 2, 1, 3)))(value_splitted); # value_splitted.shape = (batch, num_heads, key_length, value_dim // num_heads)
   if attn_type == 'full':
-    attended = SparseAttention(key_dim, value_dim, num_heads, sparse = 'all', look_backward_length = look_backward_length, local_context_length = local_context_length)([query_splitted, key_splitted, value_splitted]); # results.shape = (batch, num_heads, query_length, value_dim // num_heads)
-  elif attn_type == 'sparse':
-    attended = SparseAttention(key_dim, value_dim, num_heads, sparse = sparse, look_backward_length = look_backward_length, local_context_length = local_context_length)([query_splitted, key_splitted, value_splitted]); # results.shape = (batch, num_heads, query_length, value_dim // num_heads)
+    attended = FullAttention(key_dim, value_dim, num_heads, kwargs['drop_rate'], kwargs['causal'])([query_splitted, key_splitted, value_splitted]); # results.shape = (batch, num_heads, query_length, value_dim // num_heads)
   elif attn_type == 'axial':
-    attended = AxialAttention(key_dim, value_dim, num_heads, origin_shape, axial_dim, sparse = sparse, look_backward_length = look_backward_length)([query_splitted, key_splitted, value_splitted]); # reults.shape = (batch, num_heads, query_length, value_dim // num_heads)
+    attended = AxialAttention(key_dim, value_dim, num_heads, kwargs['drop_rate'], kwargs['origin_shape'], kwargs['axial_dim'])([query_splitted, key_splitted, value_splitted]); # reults.shape = (batch, num_heads, query_length, value_dim // num_heads)
+  elif attn_type == 'sparse':
+    attended = SparseAttention(key_dim, value_dim, num_heads, kwargs['drop_rate'], kwargs['origin_shape'], kwargs['causal'], kwargs['local_blocks'])([query_splitted, key_splitted, value_splitted]); # results.shape = (batch, num_heads, query_length, value_dim // num_heads)
   else:
     raise Exception('invalid attention type!');
   attended = tf.keras.layers.Lambda(lambda x: tf,transpose(x, (0, 2, 1, 3)))(attended); # attended.shape = (batch, query_length, num_heads, value_dim // num_heads)
@@ -390,9 +394,6 @@ def AttentionBlock(key_dim, value_dim, num_heads):
 
 if __name__ == "__main__":
   
-  m = mask((8,64,64));
-  print(m[0,0,...]);
-  '''
   query = np.random.normal(size = (4,3,150,10));
   key = np.random.normal(size = (4,3,50,10));
   value = np.random.normal(size = (4,3,50,100));
