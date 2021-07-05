@@ -292,7 +292,7 @@ def SparseAttention(key_dim, value_dim, num_heads, drop_rate = 0.5, sparse = Non
   results = SparseDenseMatMul()([attention, value]); # results.shape = (batch, num_heads, query_length, value_dim // num_heads)
   return tf.keras.Model(inputs = (query, key, value) if sparse is not None else (query, key, value, mask), outputs = results);
 
-def AxialAttention(key_dim, value_dim, num_heads, drop_rate = 0.5, origin_shape = None, axial_dim = 0, sparse = 'all', look_backward_length = 5):
+def AxialAttention(key_dim, value_dim, num_heads, drop_rate = 0.5, origin_shape = None, axial_dim = 0, sparse = 'all', look_backward_length = 5, local_context_length = 3):
   # NOTE: this attention can only apply to self attention, but cross attention.
   # in other words, query_length = key_length must hold
   # NOTE: leave one dim as seq_length, merge the other dims with heads.
@@ -322,17 +322,19 @@ def AxialAttention(key_dim, value_dim, num_heads, drop_rate = 0.5, origin_shape 
   shape = tf.keras.layers.Lambda(lambda x: tf.shape(x))(reshaped_value);
   reshaped_value = tf.keras.layers.Lambda(lambda x: tf.reshape(x, (tf.shape(x)[0], -1, tf.shape(x)[-2], tf.shape(x)[-1])))(reshaped_value); # value.shape = (batch, heads * np.prod(other_dims), axial_dim_length, dim)
   # 1) correlation matrix of query and key
-  if sparse in [None, 'all']:
+  if sparse == 'all':
     mask = Mask('all')(reshaped_query); # mask.shape = (batch, 1, origin_shape[axial_dim], origin_shape[axial_dim])
-    qk = tf.keras.layers.Lambda(lambda x: tf.linalg.matmul(x[0], x[1], transpose_b = True))([reshaped_query, reshaped_key]); # qk.shape = (batch, heads * np.prod(other_dims), query_length = axial_dim_length, key_length = axial_dim_length)
+  elif sparse == 'strided_x':
+    mask = Mask('strided_x', look_backward_length)(reshaped_query); # mask.shape = (batch, 1, origin_shape[axial_dim], origin_shape[axial_dim])
+  elif sparse == 'strided_y':
+    mask = Mask('strided_y', look_backward_length)(reshaped_query); # mask.shape = (batch, 1, origin_shape[axial_dim], origin_shape[axial_dim])
+  elif sparse == 'fixed_x':
+    mask = Mask('fixed_x', look_backward_length)(reshaped_query); # mask.shape = (batch, 1, origin_shape[axial_dim], origin_shape[axial_dim])
+  elif sparse == 'fixed_y':
+    mask = Mask('fixed_y', look_backward_length, local_context_length)(reshaped_query); # mask.shape = (batch, 1, origin_shape[axial_dim], origin_shape[axial_dim])
   else:
-    if sparse == 'local':
-      mask = Mask('local', look_backward_length)(reshaped_query); # mask.shape = (batch, 1, origin_shape[axial_dim], origin_shape[axial_dim])
-    elif sparse == 'strided':
-      mask = Mask('strided', look_backward_length)(reshaped_query); # mask.shape = (batch, 1, origin_shape[axial_dim], origin_shape[axial_dim])
-    else:
-      raise Exception('unknown sparse type!');
-    qk = MaskedDenseMatMul()([reshaped_query, reshaped_key, mask]);
+    raise Exception('unknown sparse type!');
+  qk = MaskedDenseMatMul()([reshaped_query, reshaped_key, mask]);
   logits = tf.keras.layers.Lambda(lambda x, kd: x / tf.math.sqrt(tf.cast(kd, dtype = tf.float32)), arguments = {'kd': key_dim // num_heads})(qk); # logits.shape = (batch, heads * np.prod(other_dims), query_length = axial_dim_length, key_length = axial_dim_length)
   logits = Dense2Sparse()([logits, mask]); # logits.shape = (batch, heads * np.prod(other_dims), query_length = axial_dim_length, key_length = axial_dim_length)
   attention = tf.keras.layers.Lambda(lambda x: tf.sparse.softmax(x))(logits); # attention.shape = (batch, heads * np.prod(other_dims), query_length = axial_dim_length, key_length = axial_dim_length)
@@ -406,10 +408,15 @@ if __name__ == "__main__":
   axialattention = AxialAttention(30,300,3,origin_shape = (10,5,3), axial_dim = 1, sparse = 'all');
   results = axialattention([query,key,value]);
   print('self attention all', results.shape);
-  axialattention = AxialAttention(30,300,3,origin_shape = (10,5,3), axial_dim = 1, sparse = 'local');
+  axialattention = AxialAttention(30,300,3,origin_shape = (10,5,3), axial_dim = 1, sparse = 'strided_x');
   results = axialattention([query,key,value]);
-  print('self attention local', results.shape);
-  axialattention = AxialAttention(30,300,3,origin_shape = (10,5,3), axial_dim = 1, sparse = 'strided');
+  print('self attention strided_x', results.shape);
+  axialattention = AxialAttention(30,300,3,origin_shape = (10,5,3), axial_dim = 1, sparse = 'strided_y');
   results = axialattention([query,key,value]);
-  print('self attention strided', results.shape);
-  
+  print('self attention strided_y', results.shape);
+  axialattention = AxialAttention(30,300,3,origin_shape = (10,5,3), axial_dim = 1, sparse = 'fixed_x');
+  results = axialattention([query,key,value]);
+  print('self attention fixed_x', results.shape);
+  axialattention = AxialAttention(30,300,3,origin_shape = (10,5,3), axial_dim = 1, sparse = 'fixed_y');
+  results = axialattention([query,key,value]);
+  print('self attention fixed_y', results.shape);
