@@ -396,7 +396,7 @@ def MultiHeadAttention(key_dim, value_dim, num_heads, attn_type = 'full', **kwar
   results = tf.keras.layers.Dense(key_dim)(concated); # results.shape = (batch, query_length, key_dim)
   return tf.keras.Model(inputs = (query, key, value), outputs = results);
 
-def SelfAttentionBlock(hidden_dim, num_heads = 16, attn_type = 'full', **kwargs):
+def SelfAttentionBlock(hidden_dim = 1024, num_heads = 16, attn_type = 'full', **kwargs):
   # NOTE: this sparse transformer residual block is for decoder only transformer
   inputs = tf.keras.Input((None, hidden_dim,)); # inputs.shape = (batch, hidden_length, hidden_dim)
   short = inputs;
@@ -413,7 +413,7 @@ def SelfAttentionBlock(hidden_dim, num_heads = 16, attn_type = 'full', **kwargs)
   results = tf.keras.layers.Add()([results, short]); # results.shape = (batch, hidden_length, hidden_dim)
   return tf.keras.Model(inputs = inputs, outputs = results);
 
-def CrossAttentionBlock(hidden_dim, num_heads = 16, **kwargs):
+def CrossAttentionBlock(hidden_dim = 1024, num_heads = 16, **kwargs):
   query = tf.keras.Input((None, hidden_dim)); # query.shape = (batch, query_length, key_dim)
   value = tf.keras.Input((None, hidden_dim)); # value.shape = (batch, value_length, value_dim)
   short = query;
