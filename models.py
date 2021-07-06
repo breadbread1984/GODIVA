@@ -416,7 +416,7 @@ def SelfAttentionBlock(hidden_dim = 1024, num_heads = 16, attn_type = 'full', **
 def TextSelfAttention(hidden_dim = 1024, num_heads = 16, **kwargs):
   inputs = tf.keras.Input((None, hidden_dim)); # inputs.shape = (batch, hidden_length, hidden_dim)
   results = inputs;
-  for i in range(12):
+  for i in range(4):
     results = SelfAttentionBlock(hidden_dim, num_heads, 'full', drop_rate = kwargs['drop_rate'], causal = True)([results, results, results]);
   return tf.keras.Model(inputs = inputs, outputs = results);
 
@@ -449,9 +449,10 @@ def CrossAttentionBlock(hidden_dim = 1024, num_heads = 16, **kwargs):
   return tf.keras.Model(inputs = inputs, outputs = results);
 
 class GODIVA(tf.keras.Model):
-  def __init__(self, code_shape = (10, 64, 64), vocab_size = 10000, **kwargs):
+  def __init__(self, hidden_dim = 1024, num_heads = 16, code_shape = (10, 64, 64), vocab_size = 10000, **kwargs):
     self.code_shape = code_shape;
     self.vocab_size = vocab_size;
+    self.text_self_attn = TextSelfAttention(hidden_dim, );
     super(GODIVA, self).__init__(**kwargs);
   def call(self, inputs):
     text_code = inputs; # text.shape = (batch, text_length, text_dim)
