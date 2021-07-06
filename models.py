@@ -396,7 +396,8 @@ def MultiHeadAttention(key_dim, value_dim, num_heads, attn_type = 'full', **kwar
   results = tf.keras.layers.Dense(key_dim)(concated); # results.shape = (batch, query_length, key_dim)
   return tf.keras.Model(inputs = (query, key, value), outputs = results);
 
-def ResidualBlock(hidden_dim, num_heads, attn_type = 'full', **kwargs):
+def SelfAttentionBlock(hidden_dim, num_heads = 16, attn_type = 'full', **kwargs):
+  # NOTE: this sparse transformer residual block is for decoder only transformer
   inputs = tf.keras.Input((None, hidden_dim,)); # inputs.shape = (batch, hidden_length, hidden_dim)
   short = inputs;
   results = tf.keras.layers.LayerNormalization()(inputs); # results.shape = (batch, hidden_length, hidden_dim)
@@ -406,11 +407,33 @@ def ResidualBlock(hidden_dim, num_heads, attn_type = 'full', **kwargs):
   short = results;
   results = tf.keras.layers.LayerNormalization()(results); # results.shape = (batch, hidden_length, hidden_dim)
   results = tf.keras.layers.Dense(hidden_dim * 4)(results); # results.shape = (batch, hidden_length, 4 * hidden_dim)
-  results = tfa.layers.GELU()(results); # results.shape = (batch, hidden, hidden_dim)
+  results = tfa.layers.GELU()(results); # results.shape = (batch, hidden, 4 * hidden_dim)
   results = tf.keras.layers.Dense(hidden_dim)(results);  # results.shape = (batch, hidden_length, hidden_dim)
   results = tf.keras.layers.Dropout(kwargs['drop_rate'])(results); # results.shape = (batch, hidden_length, hidden_dim)
   results = tf.keras.layers.Add()([results, short]); # results.shape = (batch, hidden_length, hidden_dim)
   return tf.keras.Model(inputs = inputs, outputs = results);
+
+def CrossAttentionBlock(hidden_dim, num_heads = 16, **kwargs):
+  query = tf.keras.Input((None, hidden_dim)); # query.shape = (batch, query_length, key_dim)
+  value = tf.keras.Input((None, hidden_dim)); # value.shape = (batch, value_length, value_dim)
+  short = query;
+  norm_query = tf.keras.layers.LayerNormalization()(query); # norm_query.shape = (batch, query_length, key_dim)
+  norm_value = tf.keras.layers.LayerNormalization()(value); # norm_value.shape = (batch, value_length, value_dim)
+  mask = tf.keras.layers.Lambda(lambda x: tf.ones((tf.shape(x[0])[0],1,tf.shape(x[0])[1], tf.shape(x[1])[1])))([query, value]); # mask.shape = (batch, 1, query_length, value_length)
+  results = MultiHeadAttention(hidden_dim, hidden_dim, num_heads, 'full', drop_rate = kwargs['drop_rate'], causal = False)([query, value, value, mask]); # results.shape = (batch, query_length, hidden_dim)
+  results = tf.keras.layers.Dropout(kwargs['drop_rate'])(results); # results.shape = (batch, query_length, hidden_dim)
+  results = tf.keras.layers.Add()([results,short]); # results.shape = (batch, query_length, hidden_dim)
+  short = results;
+  results = tf.keras.layers.LayerNormalization()(results); # results.shape = (batch, query_length, hidden_dim)
+  results = tf.keras.layers.Dense(hidden_dim * 4)(results); # results.shape = (batch, query_length, 4 * hidden_dim)
+  results = tfa.layers.GELU()(results); # results.shape = (batch, query_length, 4 * hidden_dim)
+  results = tf.keras.layers.Dense(hidden_dim)(results); # results.shape = (batch, query_length, hidden_dim)
+  results = tf.keras.layers.Dropout(kwargs['drop_rate'])(results); # results.shape = (batch, query_length, hidden_dim)
+  results = tf.keras.layers.Add()([results, short]); # results.shape = (batch, query_length, hidden_dim)
+  return tf.keras.Model(inputs = inputs, outputs = results);
+
+def GODIVA():
+  text = tf.keras.Input((None, ));
 
 if __name__ == "__main__":
   
