@@ -2,6 +2,7 @@
 
 import numpy as np;
 import tensorflow as tf;
+import tensorflow_addons as tfa;
 
 class Quantize(tf.keras.layers.Layer):
   def __init__(self, embed_dim = 128, n_embed = 10000, **kwargs):
@@ -395,11 +396,21 @@ def MultiHeadAttention(key_dim, value_dim, num_heads, attn_type = 'full', **kwar
   results = tf.keras.layers.Dense(key_dim)(concated); # results.shape = (batch, query_length, key_dim)
   return tf.keras.Model(inputs = (query, key, value), outputs = results);
 
-def AttentionBlock(key_dim, value_dim, num_heads):
-  query = tf.keras.Input((None, key_dim,)); # inputs.shape = (batch, query_length, key_dim)
-  
-  results = tf.keras.layers.LayerNormalization(axis = [1,2,3])(inputs);
-  # TODO
+def ResidualBlock(hidden_dim, num_heads, attn_type = 'full', **kwargs):
+  inputs = tf.keras.Input((None, hidden_dim,)); # inputs.shape = (batch, hidden_length, hidden_dim)
+  short = inputs;
+  results = tf.keras.layers.LayerNormalization()(inputs); # results.shape = (batch, hidden_length, hidden_dim)
+  results = MultiHeadAttention(hidden_dim, hidden_dim, num_heads, attn_type, **kwargs)([results, results, results]); # results.shape = (batch, hidden_length, hidden_dim)
+  results = tf.keras.layers.Dropout(kwargs['drop_rate'])(results); # results.shape = (batch, hidden_length, hidden_dim)
+  results = tf.keras.layers.Add()([results, short]); # results.shape = (batch, hidden_length, hidden_dim)
+  short = results;
+  results = tf.keras.layers.LayerNormalization()(results); # results.shape = (batch, hidden_length, hidden_dim)
+  results = tf.keras.layers.Dense(hidden_dim * 4)(results); # results.shape = (batch, hidden_length, 4 * hidden_dim)
+  results = tfa.layers.GELU()(results); # results.shape = (batch, hidden, hidden_dim)
+  results = tf.keras.layers.Dense(hidden_dim)(results);  # results.shape = (batch, hidden_length, hidden_dim)
+  results = tf.keras.layers.Dropout(kwargs['drop_rate'])(results); # results.shape = (batch, hidden_length, hidden_dim)
+  results = tf.keras.layers.Add()([results, short]); # results.shape = (batch, hidden_length, hidden_dim)
+  return tf.keras.Model(inputs = inputs, outputs = results);
 
 if __name__ == "__main__":
   
@@ -415,3 +426,7 @@ if __name__ == "__main__":
   multiheadattention = MultiHeadAttention(30, 300, 3, 'sparse', drop_rate = 0.2, origin_shape = (5,10), causal = True, local_blocks = 3);
   results = multiheadattention([query, key, value]);
   print(results.shape);
+  residual = ResidualBlock(30, 3, 'full', drop_rate = 0.2, causal = True);
+  results = residual(query);
+  print(results.shape);
+  residual.save('residual.h5');
