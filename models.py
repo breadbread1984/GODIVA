@@ -383,7 +383,9 @@ def MultiHeadAttention(key_dim, value_dim, num_heads, attn_type = 'full', **kwar
   value_splitted = tf.keras.layers.Reshape((-1, num_heads, value_dim // num_heads))(value_dense); # value_splitted.shape = (batch, key_length, num_heads, value_dim // num_heads)
   value_splitted = tf.keras.layers.Lambda(lambda x: tf.transpose(x, (0, 2, 1, 3)))(value_splitted); # value_splitted.shape = (batch, num_heads, key_length, value_dim // num_heads)
   if attn_type == 'full':
-    attended = FullAttention(key_dim, value_dim, num_heads, kwargs['drop_rate'], kwargs['causal'])([query_splitted, key_splitted, value_splitted]); # results.shape = (batch, num_heads, query_length, value_dim // num_heads)
+    if kwargs['causal'] == False:
+      mask = tf.keras.Input((1, None, None)); # mask.shape = (batch, 1, query_length, key_length)
+    attended = FullAttention(key_dim, value_dim, num_heads, kwargs['drop_rate'], kwargs['causal'])([query_splitted, key_splitted, value_splitted] if kwargs['causal'] == True else [query_splitted, key_splitted, value_splitted, mask]); # results.shape = (batch, num_heads, query_length, value_dim // num_heads)
   elif attn_type == 'axial':
     attended = AxialAttention(key_dim, value_dim, num_heads, kwargs['drop_rate'], kwargs['origin_shape'], kwargs['axial_dim'])([query_splitted, key_splitted, value_splitted]); # reults.shape = (batch, num_heads, query_length, value_dim // num_heads)
   elif attn_type == 'sparse':
@@ -394,7 +396,7 @@ def MultiHeadAttention(key_dim, value_dim, num_heads, attn_type = 'full', **kwar
   concated = tf.keras.layers.Reshape((-1, value_dim))(attended); # concated.shape = (batch, query_length, value_dim)
   # 3) output
   results = tf.keras.layers.Dense(key_dim)(concated); # results.shape = (batch, query_length, key_dim)
-  return tf.keras.Model(inputs = (query, key, value), outputs = results);
+  return tf.keras.Model(inputs = (query, key, value) if attn_type != 'full' or kwargs['causal'] == True else (query, key, value, mask), outputs = results);
 
 def SelfAttentionBlock(hidden_dim = 1024, num_heads = 16, attn_type = 'full', **kwargs):
   # NOTE: this sparse transformer residual block is for decoder only transformer
@@ -446,7 +448,7 @@ def CrossAttentionBlock(hidden_dim = 1024, num_heads = 16, **kwargs):
   results = tf.keras.layers.Dense(hidden_dim)(results); # results.shape = (batch, query_length, hidden_dim)
   results = tf.keras.layers.Dropout(kwargs['drop_rate'])(results); # results.shape = (batch, query_length, hidden_dim)
   results = tf.keras.layers.Add()([results, short]); # results.shape = (batch, query_length, hidden_dim)
-  return tf.keras.Model(inputs = inputs, outputs = results);
+  return tf.keras.Model(inputs = (query, value), outputs = results);
 
 def PositionalEncoding(d_model):
   # 1) inputs
