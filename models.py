@@ -426,9 +426,9 @@ def VideoSelfAttention(hidden_dim = 1024, num_heads = 16, origin_shape = (10, 64
   inputs = tf.keras.Input((None, hidden_dim)); # inputs.shape = (batch, hidden_length, hidden_dim)
   results = inputs;
   for i in range(4):
-    results = SelfAttentionBlock(hidden_dim, num_heads, 'axial', drop_rate = kwargs['drop_rate'], origin_shape = origin_shape, axial_dim = 0)(results);
-    results = SelfAttentionBlock(hidden_dim, num_heads, 'axial', drop_rate = kwargs['drop_rate'], origin_shape = origin_shape, axial_dim = 1)(results);
-    results = SelfAttentionBlock(hidden_dim, num_heads, 'axial', drop_rate = kwargs['drop_rate'], origin_shape = origin_shape, axial_dim = 2)(results);
+    results = SelfAttentionBlock(hidden_dim, num_heads, 'axial', drop_rate = kwargs['drop_rate'], origin_shape = origin_shape, axial_dim = -3)(results);
+    results = SelfAttentionBlock(hidden_dim, num_heads, 'axial', drop_rate = kwargs['drop_rate'], origin_shape = origin_shape, axial_dim = -2)(results);
+    results = SelfAttentionBlock(hidden_dim, num_heads, 'axial', drop_rate = kwargs['drop_rate'], origin_shape = origin_shape, axial_dim = -1)(results);
   return tf.keras.Model(inputs = inputs, outputs = results);
 
 def CrossAttentionBlock(hidden_dim = 1024, num_heads = 16, **kwargs):
@@ -469,22 +469,22 @@ def PositionalEncoding(d_model):
   results = tf.keras.layers.Add()([inputs, pos_encoding]);                                                                                   # results.shape = (batch, length, dimension)
   return tf.keras.Model(inputs = inputs, outputs = results);
 
-def Transformer(hidden_dim = 128, num_heads = 16, video_shape = (10, 64, 64), text_vocab_size = None, video_vocab_size = 10000, **kwargs):
+def Transformer(hidden_dim = 128, num_heads = 16, origin_shape = (10, 64, 64), text_vocab_size = None, video_vocab_size = 10000, **kwargs):
   text_inputs = tf.keras.Input((None,)); # inputs.shape = (batch, text_length)
   # INFO: to avoid repeat calculating embedding of leading frames, the input uses code from VQVAE, but leading frames
-  # NOTE: video_top_inputs.shape[1] = video_shape[1] // 8 * video_shape[2] // 8 * frame_number
-  # NOTE: video_bottom_inputs.shape[1] = video_shape[1] // 4 * video_shape[2] // 4 * frame_number
-  video_top_inputs = tf.keras.Input((None, hidden_dim)); # video_top_inputs.shape = (batch, video_token_length, hidden_dim)
-  video_bottom_inputs = tf.keras.Input((None, hidden_dim)); # video_bottom_inputs.shape = (batch, video_token_length, hidden_dim)
+  # NOTE: video_top_inputs.shape[1] = origin_shape[1] // 8 * origin_shape[2] // 8 * frame_number
+  # NOTE: video_bottom_inputs.shape[1] = origin_shape[1] // 4 * origin_shape[2] // 4 * frame_number
+  video_top_inputs = tf.keras.Input((None, hidden_dim)); # video_top_inputs.shape = (batch, frame * 64 * 64, hidden_dim)
+  video_bottom_inputs = tf.keras.Input((None, hidden_dim)); # video_bottom_inputs.shape = (batch, frame * 64 * 64, hidden_dim)
   
   text_embed = tf.keras.layers.Embedding(text_vocab_size, hidden_dim)(text_inputs);
   text_embed = tf.keras.layers.Lambda(lambda x, d: tf.math.sqrt(tf.cast(d, dtype = tf.float32)) * x, arguments = {'d': hidden_dim})(text_embed);
   text_embed = PositionalEncoding(hidden_dim)(text_embed); # text_embed.shape = (batch, text_length, hidden_dim)
   text_code = TextSelfAttention(hidden_dim, num_heads, drop_rate = kwargs['drop_rate'])(text_embed); # text_code.shape = (batch, text_length, hidden_dim)
-  video_top_code = VideoSelfAttention(hidden_dim, num_heads, drop_rate = kwargs['drop_rate'], origin_shape = (video_shape[1] // 8, video_shape[2] // 8, hidden_dim))(video_top_inputs);
-  video_bottom_code = VideoSelfAttention(hidden_dim, num_heads, drop_rate = kwargs['drop_rate'], origin_shape = (video_shape[1] // 4, video_shape[2] // 4, hidden_dim))(video_bottom_inputs);
-  video_top_attended = CrossAttentionBlock(hidden_dim, num_heads, drop_rate = kwargs['drop_rate'])([text_code, video_top_code]);
-  video_bottom_attended = CrossAttentionBlock(hidden_dim, num_heads, drop_rate = kwargs['drop_rate'])([text_code, video_bottom_code]);
+  video_top_code = VideoSelfAttention(hidden_dim, num_heads, drop_rate = kwargs['drop_rate'], origin_shape = (origin_shape[0], origin_shape[1] // 8, origin_shape[2] // 8))(video_top_inputs);
+  video_bottom_code = VideoSelfAttention(hidden_dim, num_heads, drop_rate = kwargs['drop_rate'], origin_shape = (origin_shape[0], origin_shape[1] // 4, origin_shape[2] // 4))(video_bottom_inputs);
+  video_top_attended = CrossAttentionBlock(hidden_dim, num_heads, drop_rate = kwargs['drop_rate'])([video_top_code, text_code]);
+  video_bottom_attended = CrossAttentionBlock(hidden_dim, num_heads, drop_rate = kwargs['drop_rate'])([video_bottom_code, text_code]);
   return tf.keras.Model(inputs = (text_inputs, video_top_inputs, video_bottom_inputs), outputs = (video_top_attended, video_bottom_attended));
 
 if __name__ == "__main__":
@@ -501,10 +501,10 @@ if __name__ == "__main__":
   multiheadattention = MultiHeadAttention(30, 300, 3, 'sparse', drop_rate = 0.2, origin_shape = (5,10), causal = True, local_blocks = 3);
   results = multiheadattention([query, key, value]);
   print(results.shape);
-  transformer = Transformer(text_vocab_size = 10, drop_rate = 0.2);
+  transformer = Transformer(text_vocab_size = 10, origin_shape = (3, 64, 64), drop_rate = 0.2);
   text = np.random.randint(low = 0, high = 10, size = (4, 34));
-  top = np.random.normal(size = (4, 8 * 8,128));
-  bottom = np.random.normal(size = (4,16 * 16,128));
+  top = np.random.normal(size = (4, 3 * 8 * 8, 128));
+  bottom = np.random.normal(size = (4, 3 * 16 * 16, 128));
   top, bottom = transformer([text, top, bottom]);
   print(top.shape);
   print(bottom.shape);
