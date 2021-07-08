@@ -12,7 +12,7 @@ def main(quantize_type = 'original'):
   if quantize_type == 'ema_update':
     trainer.encoder.layers[4].set_trainable(False);
     trainer.encoder.layers[8].set_trainable(False);
-  if exists('models'): mkdir('models');
+  if not exists('models'): mkdir('models');
   trainer.encoder.save(join('models','encoder.h5'));
   trainer.decoder.save(join('models','decoder.h5'));
   
