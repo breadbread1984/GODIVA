@@ -383,7 +383,9 @@ def MultiHeadAttention(key_dim, value_dim, num_heads, attn_type = 'full', **kwar
   value_splitted = tf.keras.layers.Reshape((-1, num_heads, value_dim // num_heads))(value_dense); # value_splitted.shape = (batch, key_length, num_heads, value_dim // num_heads)
   value_splitted = tf.keras.layers.Lambda(lambda x: tf.transpose(x, (0, 2, 1, 3)))(value_splitted); # value_splitted.shape = (batch, num_heads, key_length, value_dim // num_heads)
   if attn_type == 'full':
-    attended = FullAttention(key_dim, value_dim, num_heads, kwargs['drop_rate'], kwargs['causal'])([query_splitted, key_splitted, value_splitted]); # results.shape = (batch, num_heads, query_length, value_dim // num_heads)
+    if kwargs['causal'] == False:
+      mask = tf.keras.Input((1, None, None)); # mask.shape = (batch, 1, query_length, key_length)
+    attended = FullAttention(key_dim, value_dim, num_heads, kwargs['drop_rate'], kwargs['causal'])([query_splitted, key_splitted, value_splitted] if kwargs['causal'] == True else [query_splitted, key_splitted, value_splitted, mask]); # results.shape = (batch, num_heads, query_length, value_dim // num_heads)
   elif attn_type == 'axial':
     attended = AxialAttention(key_dim, value_dim, num_heads, kwargs['drop_rate'], kwargs['origin_shape'], kwargs['axial_dim'])([query_splitted, key_splitted, value_splitted]); # reults.shape = (batch, num_heads, query_length, value_dim // num_heads)
   elif attn_type == 'sparse':
@@ -394,7 +396,7 @@ def MultiHeadAttention(key_dim, value_dim, num_heads, attn_type = 'full', **kwar
   concated = tf.keras.layers.Reshape((-1, value_dim))(attended); # concated.shape = (batch, query_length, value_dim)
   # 3) output
   results = tf.keras.layers.Dense(key_dim)(concated); # results.shape = (batch, query_length, key_dim)
-  return tf.keras.Model(inputs = (query, key, value), outputs = results);
+  return tf.keras.Model(inputs = (query, key, value) if attn_type != 'full' or kwargs['causal'] == True else (query, key, value, mask), outputs = results);
 
 def SelfAttentionBlock(hidden_dim = 1024, num_heads = 16, attn_type = 'full', **kwargs):
   # NOTE: this sparse transformer residual block is for decoder only transformer
@@ -417,16 +419,16 @@ def TextSelfAttention(hidden_dim = 1024, num_heads = 16, **kwargs):
   inputs = tf.keras.Input((None, hidden_dim)); # inputs.shape = (batch, hidden_length, hidden_dim)
   results = inputs;
   for i in range(4):
-    results = SelfAttentionBlock(hidden_dim, num_heads, 'full', drop_rate = kwargs['drop_rate'], causal = True)([results, results, results]);
+    results = SelfAttentionBlock(hidden_dim, num_heads, 'full', drop_rate = kwargs['drop_rate'], causal = True)(results);
   return tf.keras.Model(inputs = inputs, outputs = results);
 
 def VideoSelfAttention(hidden_dim = 1024, num_heads = 16, origin_shape = (10, 64, 64), **kwargs):
   inputs = tf.keras.Input((None, hidden_dim)); # inputs.shape = (batch, hidden_length, hidden_dim)
   results = inputs;
   for i in range(4):
-    results = SelfAttentionBlock(hidden_dim, num_heads, 'axial', drop_rate = kwargs['drop_rate'], origin_shape = origin_shape, axial_dim = 0)([results, results, results]);
-    results = SelfAttentionBlock(hidden_dim, num_heads, 'axial', drop_rate = kwargs['drop_rate'], origin_shape = origin_shape, axial_dim = 1)([results, results, results]);
-    results = SelfAttentionBlock(hidden_dim, num_heads, 'axial', drop_rate = kwargs['drop_rate'], origin_shape = origin_shape, axial_dim = 2)([results, results, results]);
+    results = SelfAttentionBlock(hidden_dim, num_heads, 'axial', drop_rate = kwargs['drop_rate'], origin_shape = origin_shape, axial_dim = -3)(results);
+    results = SelfAttentionBlock(hidden_dim, num_heads, 'axial', drop_rate = kwargs['drop_rate'], origin_shape = origin_shape, axial_dim = -2)(results);
+    results = SelfAttentionBlock(hidden_dim, num_heads, 'axial', drop_rate = kwargs['drop_rate'], origin_shape = origin_shape, axial_dim = -1)(results);
   return tf.keras.Model(inputs = inputs, outputs = results);
 
 def CrossAttentionBlock(hidden_dim = 1024, num_heads = 16, **kwargs):
@@ -446,18 +448,44 @@ def CrossAttentionBlock(hidden_dim = 1024, num_heads = 16, **kwargs):
   results = tf.keras.layers.Dense(hidden_dim)(results); # results.shape = (batch, query_length, hidden_dim)
   results = tf.keras.layers.Dropout(kwargs['drop_rate'])(results); # results.shape = (batch, query_length, hidden_dim)
   results = tf.keras.layers.Add()([results, short]); # results.shape = (batch, query_length, hidden_dim)
+  return tf.keras.Model(inputs = (query, value), outputs = results);
+
+def PositionalEncoding(d_model):
+  # 1) inputs
+  inputs = tf.keras.Input((None, d_model)); # inputs.shape = (batch, length, dimension)
+  # 2) position info
+  positions = tf.keras.layers.Lambda(lambda x: tf.expand_dims(tf.range(tf.cast(tf.shape(x)[1], dtype = tf.float32), dtype = tf.float32),1))(inputs); # positions.shape = (length, 1)
+  # 3) dimension info
+  j = tf.keras.layers.Lambda(lambda x: tf.expand_dims(tf.range(tf.cast(tf.shape(x)[2], dtype = tf.float32), dtype = tf.float32),0))(inputs); # j.shape = (1, dimension)
+  i = tf.keras.layers.Lambda(lambda x: x // 2)(j);                                                                                           # i.shape = (1, dimension)
+  power = tf.keras.layers.Lambda(lambda x: 2 * x[0] / tf.cast(tf.shape(x[1])[2], dtype = tf.float32))([i, inputs]);                          # power.shape = (1, dimension)
+  # 4) position & dimension info
+  angles = tf.keras.layers.Lambda(lambda x: x[0] / tf.math.pow(10000.,x[1]))([positions, power]);                                            # angles.shape = (length, dimension)
+  sines = tf.keras.layers.Lambda(lambda x: tf.math.sin(x[:,0::2]))(angles);                                                                  # sines.shape = (length, dimension // 2)
+  cosines = tf.keras.layers.Lambda(lambda x: tf.math.cos(x[:,1::2]))(angles);                                                                # cosines.shape = (length, dimension // 2)
+  pos_encoding = tf.keras.layers.Concatenate()([sines, cosines]);                                                                            # pos_encoding.shape = (length, dimension)
+  pos_encoding = tf.keras.layers.Lambda(lambda x: tf.tile(tf.expand_dims(x[0],0), (tf.shape(x[1])[0], 1, 1)))([pos_encoding, inputs]);       # pos_encoding.shape = (batch, length, dimension)
+  # 5) positional & embedding
+  results = tf.keras.layers.Add()([inputs, pos_encoding]);                                                                                   # results.shape = (batch, length, dimension)
   return tf.keras.Model(inputs = inputs, outputs = results);
 
-class GODIVA(tf.keras.Model):
-  def __init__(self, hidden_dim = 1024, num_heads = 16, code_shape = (10, 64, 64), vocab_size = 10000, **kwargs):
-    self.code_shape = code_shape;
-    self.vocab_size = vocab_size;
-    self.text_self_attn = TextSelfAttention(hidden_dim, );
-    super(GODIVA, self).__init__(**kwargs);
-  def call(self, inputs):
-    text_code = inputs; # text.shape = (batch, text_length, text_dim)
-    frame_code = tf.random.uniform((tf.shape(text_code)[0],), minval = 0, maxval = self.vocab_size, dtype = tf.int32); # frame.shape = (batch,)
-    
+def Transformer(hidden_dim = 128, num_heads = 16, origin_shape = (10, 64, 64), text_vocab_size = None, video_vocab_size = 10000, **kwargs):
+  text_inputs = tf.keras.Input((None,)); # inputs.shape = (batch, text_length)
+  # INFO: to avoid repeat calculating embedding of leading frames, the input uses code from VQVAE, but leading frames
+  # NOTE: video_top_inputs.shape[1] = origin_shape[1] // 8 * origin_shape[2] // 8 * frame_number
+  # NOTE: video_bottom_inputs.shape[1] = origin_shape[1] // 4 * origin_shape[2] // 4 * frame_number
+  video_top_inputs = tf.keras.Input((None, hidden_dim)); # video_top_inputs.shape = (batch, frame * 64 * 64, hidden_dim)
+  video_bottom_inputs = tf.keras.Input((None, hidden_dim)); # video_bottom_inputs.shape = (batch, frame * 64 * 64, hidden_dim)
+  
+  text_embed = tf.keras.layers.Embedding(text_vocab_size, hidden_dim)(text_inputs);
+  text_embed = tf.keras.layers.Lambda(lambda x, d: tf.math.sqrt(tf.cast(d, dtype = tf.float32)) * x, arguments = {'d': hidden_dim})(text_embed);
+  text_embed = PositionalEncoding(hidden_dim)(text_embed); # text_embed.shape = (batch, text_length, hidden_dim)
+  text_code = TextSelfAttention(hidden_dim, num_heads, drop_rate = kwargs['drop_rate'])(text_embed); # text_code.shape = (batch, text_length, hidden_dim)
+  video_top_code = VideoSelfAttention(hidden_dim, num_heads, drop_rate = kwargs['drop_rate'], origin_shape = (origin_shape[0], origin_shape[1] // 8, origin_shape[2] // 8))(video_top_inputs);
+  video_bottom_code = VideoSelfAttention(hidden_dim, num_heads, drop_rate = kwargs['drop_rate'], origin_shape = (origin_shape[0], origin_shape[1] // 4, origin_shape[2] // 4))(video_bottom_inputs);
+  video_top_attended = CrossAttentionBlock(hidden_dim, num_heads, drop_rate = kwargs['drop_rate'])([video_top_code, text_code]);
+  video_bottom_attended = CrossAttentionBlock(hidden_dim, num_heads, drop_rate = kwargs['drop_rate'])([video_bottom_code, text_code]);
+  return tf.keras.Model(inputs = (text_inputs, video_top_inputs, video_bottom_inputs), outputs = (video_top_attended, video_bottom_attended));
 
 if __name__ == "__main__":
   
@@ -473,7 +501,11 @@ if __name__ == "__main__":
   multiheadattention = MultiHeadAttention(30, 300, 3, 'sparse', drop_rate = 0.2, origin_shape = (5,10), causal = True, local_blocks = 3);
   results = multiheadattention([query, key, value]);
   print(results.shape);
-  residual = ResidualBlock(30, 3, 'full', drop_rate = 0.2, causal = True);
-  results = residual(query);
-  print(results.shape);
-  residual.save('residual.h5');
+  transformer = Transformer(text_vocab_size = 10, origin_shape = (3, 64, 64), drop_rate = 0.2);
+  text = np.random.randint(low = 0, high = 10, size = (4, 34));
+  top = np.random.normal(size = (4, 3 * 8 * 8, 128));
+  bottom = np.random.normal(size = (4, 3 * 16 * 16, 128));
+  top, bottom = transformer([text, top, bottom]);
+  print(top.shape);
+  print(bottom.shape);
+  transformer.save('transformer.h5');
