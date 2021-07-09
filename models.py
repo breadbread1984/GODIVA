@@ -496,4 +496,9 @@ if __name__ == "__main__":
   top, bottom = transformer([text, top, bottom]);
   print(top.shape);
   print(bottom.shape);
+  top = np.random.normal(size = (4, 4 * 8 * 8, 128));
+  bottom = np.random.normal(size = (4, 4 * 16 * 16, 128));
+  top, bottom = transformer([text, top, bottom]);
+  print(top.shape);
+  print(bottom.shape);
   transformer.save('transformer.h5');
