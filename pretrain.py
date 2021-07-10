@@ -8,10 +8,10 @@ from create_dataset import parse_function_generator, load_dataset;
 batch_size = 128;
 img_size = (64, 64);
 
-def main(train_dir, test_dir, quantize_type = 'normal'):
+def main(train_dir, test_dir, quantize_type = 'original'):
 
   trainer = VQVAE_Trainer(quantize_type = quantize_type);
-  if exists('./checkpoints/chkpt'): trainer.load_weights('./checkpoints/ckpt');
+  if exists('./checkpoints/ckpt'): trainer.load_weights('./checkpoints/ckpt');
   optimizer = tf.keras.optimizers.Adam(3e-4);
   trainer.compile(optimizer = optimizer,
                   loss = {'output_1': lambda labels, outputs: tf.keras.losses.MeanSquaredError()(labels, outputs),
