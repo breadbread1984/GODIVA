@@ -531,14 +531,14 @@ class GODIVA(tf.keras.Model):
     bottom_embeddings = tf.reshape(bottom_embeddings[:,1:,:], (-1, self.video_length, self.origin_shape[0] // 4, self.origin_shape[1] // 4, tf.shape(bottom_embeddings)[-1]));
     video = list();
     for i in range(self.video_length):
-      frame = self.decoder([top_embeddings[:, i, ...], bottom_embeddings[:, i, ...]]);
+      frame = self.decoder([top_embeddings[:, i, ...], bottom_embeddings[:, i, ...]]); # frame.shape = (batch, 64, 64, 3)
       video.append(frame);
-    video = tf.stack(video, axis = 1);
+    video = tf.stack(video, axis = 1); # video.shape = (batch, seq_length, 64, 64, 3)
     return video;
 
 if __name__ == "__main__":
 
-  transformer = Transformer(text_vocab_size = 10, origin_shape = (64, 64), drop_rate = 0.2);
+  transformer = Transformer(text_vocab_size = 10, origin_shape = (8, 8), drop_rate = 0.2);
   text = np.random.randint(low = 0, high = 10, size = (4, 34));
   top = np.random.normal(size = (4, 3 * 8 * 8, 128));
   top = transformer([text, top]);
