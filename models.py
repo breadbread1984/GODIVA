@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 
+from os.path import join;
 import numpy as np;
 import tensorflow as tf;
 import tensorflow_addons as tfa;
@@ -12,6 +13,8 @@ class Quantize(tf.keras.layers.Layer):
   def build(self, input_shape):
     # cluster_mean: cluster means which are used as codes for code book
     self.cluster_mean = self.add_weight(shape = (self.embed_dim, self.n_embed), dtype = tf.float32, initializer = tf.keras.initializers.RandomNormal(stddev = 1.), trainable = True, name = 'cluster_mean');
+  def get_embed(self,):
+    return self.cluster_mean;
   def call(self, inputs):
     samples = tf.reshape(inputs, (-1, self.embed_dim,)); # samples.shape = (n_sample, dim)
     # dist = (X - cluster_mean)^2 = X' * X - 2 * X' * Embed + trace(Embed' * Embed),  dist.shape = (n_sample, n_embed), euler distances to cluster_meanding vectors
@@ -46,6 +49,8 @@ class QuantizeEma(tf.keras.layers.Layer):
     self.cluster_size = self.add_weight(shape = (self.n_embed,), dtype = tf.float32, initializer = tf.keras.initializers.Zeros(), trainable = True, name = 'cluster_size');
     self.cluster_sum = self.add_weight(shape = (self.embed_dim, self.n_embed), dtype = tf.float32, initializer = tf.keras.initializers.RandomNormal(stddev = 1.), trainable = True, name = 'cluster_sum');
     self.cluster_mean.assign(self.cluster_sum);
+  def get_embed(self,):
+    return self.cluster_mean;
   def call(self, inputs):
     samples = tf.reshape(inputs, (-1, self.embed_dim,)); # samples.shape = (n_sample, dim)
     # dist = (X - cluster_mean)^2 = X' * X - 2 * X' * Embed + trace(Embed' * Embed),  dist.shape = (n_sample, n_embed), euler distances to cluster_meanding vectors
@@ -434,7 +439,7 @@ def EncoderLayer(hidden_dim = 1024, num_heads = 16, **kwargs):
   results = tf.keras.layers.Add()([results, short]); # results.shape = (batch, hidden_length, hidden_dim)
   return tf.keras.Model(inputs = inputs, outputs = results);
 
-def Encoder(num_layers = 2, hidden_dim = 1024, num_heads = 16, **kwargs):
+def TransEncoder(num_layers = 2, hidden_dim = 1024, num_heads = 16, **kwargs):
   inputs = tf.keras.Input((None, hidden_dim));
   embeddings = PositionalEncoding(hidden_dim)(inputs);
   outputs = tf.keras.layers.Dropout(rate = kwargs['drop_rate'])(embeddings);
@@ -468,7 +473,7 @@ def DecoderLayer(hidden_dim = 1024, num_heads = 16, **kwargs):
   results = tf.keras.layers.Add()([results, short]);
   return tf.keras.Model(inputs = (inputs, code), outputs = results);
 
-def Decoder(num_layers = 2, hidden_dim = 1024, num_heads = 16, **kwargs):
+def TransDecoder(num_layers = 2, hidden_dim = 1024, num_heads = 16, **kwargs):
   inputs = tf.keras.Input((None, hidden_dim));
   code = tf.keras.Input((None, hidden_dim));
   embeddings = PositionalEncoding(hidden_dim)(inputs);
@@ -482,31 +487,63 @@ def Transformer(encoder_layers = 2, decoder_layers = 2, hidden_dim = 128, num_he
   # INFO: to avoid repeat calculating embedding of leading frames, the input uses code from VQVAE, but leading frames
   # NOTE: video_top_inputs.shape[1] = origin_shape[1] // 8 * origin_shape[2] // 8 * frame_number
   # NOTE: video_bottom_inputs.shape[1] = origin_shape[1] // 4 * origin_shape[2] // 4 * frame_number
-  video_top_inputs = tf.keras.Input((None, hidden_dim)); # video_top_inputs.shape = (batch, frame * 64 * 64, hidden_dim)
-  video_bottom_inputs = tf.keras.Input((None, hidden_dim)); # video_bottom_inputs.shape = (batch, frame * 64 * 64, hidden_dim)
+  video_inputs = tf.keras.Input((None, hidden_dim)); # video_top_inputs.shape = (batch, frame * 64 * 64, hidden_dim)
   
   text_embed = tf.keras.layers.Embedding(text_vocab_size, hidden_dim)(text_inputs);
   text_embed = tf.keras.layers.Lambda(lambda x, d: tf.math.sqrt(tf.cast(d, dtype = tf.float32)) * x, arguments = {'d': hidden_dim})(text_embed);
   
-  text_code = Encoder(encoder_layers, hidden_dim, num_heads, drop_rate = kwargs['drop_rate'])(text_embed); # text_code.shape = (batch, text_length, hidden_dim)
-  video_top_code = Decoder(decoder_layers, hidden_dim, num_heads, drop_rate = kwargs['drop_rate'], origin_shape = (origin_shape[0] // 8, origin_shape[1] // 8))([video_top_inputs, text_code]);
-  video_bottom_code = Decoder(decoder_layers, hidden_dim, num_heads, drop_rate = kwargs['drop_rate'], origin_shape = (origin_shape[0] // 4, origin_shape[1] // 4))([video_bottom_inputs, text_code]);
-  video_top = tf.keras.layers.Dense(units = video_vocab_size, activation = tf.keras.activations.softmax)(video_top_code);
-  video_bottom = tf.keras.layers.Dense(units = video_vocab_size, activation = tf.keras.activations.softmax)(video_bottom_code);
-  return tf.keras.Model(inputs = (text_inputs, video_top_inputs, video_bottom_inputs), outputs = (video_top, video_bottom));
+  text_code = TransEncoder(encoder_layers, hidden_dim, num_heads, drop_rate = kwargs['drop_rate'])(text_embed); # text_code.shape = (batch, text_length, hidden_dim)
+  video_code = TransDecoder(decoder_layers, hidden_dim, num_heads, drop_rate = kwargs['drop_rate'], origin_shape = (origin_shape[0], origin_shape[1]))([video_inputs, text_code]);
+  video_pred = tf.keras.layers.Dense(units = video_vocab_size, activation = tf.keras.activations.softmax)(video_code);
+  return tf.keras.Model(inputs = (text_inputs, video_inputs), outputs = video_pred);
+
+class GODIVA(tf.keras.Model):
+  def __init__(self, vq_type = 'ema_update', vq_encoder_model = join('models', 'encoder_d128_c10000_64x64.h5'), vq_decoder_model = join('models', 'decoder_d128_c10000_64x64.h5'), origin_shape = (64, 64), video_length = 10, text_vocab_size = None, video_vocab_size = 10000, **kwargs):
+    self.origin_shape = origin_shape;
+    self.video_length = video_length;
+    self.video_vocab_size = video_vocab_size;
+    self.encoder = tf.keras.models.load_model(vq_encoder_model, custom_objects = {'Quantize': Quantize, 'QuantizeEma': QuantizeEma});
+    self.decoder = tf.keras.models.load_model(vq_deocder_model);
+    self.encoder.trainable = False;
+    self.decoder.trainable = False;
+    self.top_transformer = Transformer(origin_shape = (origin_shape[0] // 8, origin_shape[1] // 8), text_vocab_size = text_vocab_size, video_vocab_size = video_vocab_size);
+    self.bottom_transformer = Transformer(origin_shape = (origin_shape[0] // 4, origin_shape[1] // 4), text_vocab_size = text_vocab_size, video_vocab_size = video_vocab_size);
+    super(self, GODIVA).__init__(**kwargs);
+  def call(inputs):
+    # NOTE: inputs.shape = (batch, max_seq_length)
+    top_tokens = tf.random.uniform((tf.shape(inputs)[0], 1), 0, self.video_vocab_size, dtype = tf.int32); # top_tokens.shape = (batch, 1)
+    bottom_tokens = tf.random.uniform((tf.shape(inputs)[0], 1), 0, self.video_vocab_size, dtype = tf.int32); # bottom_tokens.shape = (batch, 1)
+    top_embed_mat = self.encoder.layers[4].get_embed();
+    bottom_embed_mat = self.encoder.layers[8].get_embed();
+    top_embeddings = tf.nn.embedding_lookup(tf.transpose(self.top_embed_mat), top_tokens); # top_embeddings.shape = (batch, 1, embed_dim)
+    bottom_embeddings = tf.nn.embedding_lookup(tf.transpose(self.bottom_embed_mat), bottom_tokens); # bottom_embeddings.shape = (batch, 1, embed_dim)
+    for i in range(self.video_length * self.origin_shape[0] // 8 * self.origin_shape[1] // 8):
+      top_pred = self.top_transformer([inputs, top_embeddings]); # top_pred.shape = (batch, length, video_vocab_size)
+      tokens = tf.math.argmax(top_pred, axis = -1); # tokens.shape = (batch, length)
+      embeddings = tf.nn.embedding_lookup(tf.transpose(self.top_embed_mat), tokens); # embeddings.shape = (batch, sequence, embed_dim)
+      top_embeddings = tf.concat([top_embeddings, embeddings[:,-1,:]], axis = 1);
+    for i in range(self.video_length * self.origin_shape[0] // 4 * self.origin_shape[1] // 4):
+      bottom_pred = self.bottom_transformer([inputs, bottom_embeddings]);
+      tokens = tf.math.argmax(bottom_pred, axis = -1); # tokens.shape = (batch, length)
+      embeddings = tf.nn.embedding_lookup(tf.transpose(self.bottom_embed_mat), tokens);
+      bottom_embeddings = tf.concat([bottom_embeddings, embeddings[:,-1,:]], axis = 1);
+    top_embeddings = tf.reshape(top_embeddings[:,1:,:], (-1, self.video_length, self.origin_shape[0] // 8, self.origin_shape[1] // 8, tf.shape(top_embeddings)[-1]));
+    bottom_embeddings = tf.reshape(bottom_embeddings[:,1:,:], (-1, self.video_length, self.origin_shape[0] // 4, self.origin_shape[1] // 4, tf.shape(bottom_embeddings)[-1]));
+    video = list();
+    for i in range(self.video_length):
+      frame = self.decoder([top_embeddings[:, i, ...], bottom_embeddings[:, i, ...]]);
+      video.append(frame);
+    video = tf.stack(video, axis = 1);
+    return video;
 
 if __name__ == "__main__":
 
   transformer = Transformer(text_vocab_size = 10, origin_shape = (64, 64), drop_rate = 0.2);
   text = np.random.randint(low = 0, high = 10, size = (4, 34));
   top = np.random.normal(size = (4, 3 * 8 * 8, 128));
-  bottom = np.random.normal(size = (4, 3 * 16 * 16, 128));
-  top, bottom = transformer([text, top, bottom]);
+  top = transformer([text, top]);
   print(top.shape);
-  print(bottom.shape);
   top = np.random.normal(size = (4, 4 * 8 * 8, 128));
-  bottom = np.random.normal(size = (4, 4 * 16 * 16, 128));
-  top, bottom = transformer([text, top, bottom]);
+  top = transformer([text, top]);
   print(top.shape);
-  print(bottom.shape);
   transformer.save('transformer.h5');
