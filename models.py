@@ -398,58 +398,6 @@ def MultiHeadAttention(key_dim, value_dim, num_heads, attn_type = 'full', **kwar
   results = tf.keras.layers.Dense(key_dim)(concated); # results.shape = (batch, query_length, key_dim)
   return tf.keras.Model(inputs = (query, key, value) if attn_type != 'full' or kwargs['causal'] == True else (query, key, value, mask), outputs = results);
 
-def SelfAttentionBlock(hidden_dim = 1024, num_heads = 16, attn_type = 'full', **kwargs):
-  # NOTE: this sparse transformer residual block is for decoder only transformer
-  inputs = tf.keras.Input((None, hidden_dim,)); # inputs.shape = (batch, hidden_length, hidden_dim)
-  short = inputs;
-  results = tf.keras.layers.LayerNormalization()(inputs); # results.shape = (batch, hidden_length, hidden_dim)
-  results = MultiHeadAttention(hidden_dim, hidden_dim, num_heads, attn_type, **kwargs)([results, results, results]); # results.shape = (batch, hidden_length, hidden_dim)
-  results = tf.keras.layers.Dropout(kwargs['drop_rate'])(results); # results.shape = (batch, hidden_length, hidden_dim)
-  results = tf.keras.layers.Add()([results, short]); # results.shape = (batch, hidden_length, hidden_dim)
-  short = results;
-  results = tf.keras.layers.LayerNormalization()(results); # results.shape = (batch, hidden_length, hidden_dim)
-  results = tf.keras.layers.Dense(hidden_dim * 4)(results); # results.shape = (batch, hidden_length, 4 * hidden_dim)
-  results = tfa.layers.GELU()(results); # results.shape = (batch, hidden, 4 * hidden_dim)
-  results = tf.keras.layers.Dense(hidden_dim)(results);  # results.shape = (batch, hidden_length, hidden_dim)
-  results = tf.keras.layers.Dropout(kwargs['drop_rate'])(results); # results.shape = (batch, hidden_length, hidden_dim)
-  results = tf.keras.layers.Add()([results, short]); # results.shape = (batch, hidden_length, hidden_dim)
-  return tf.keras.Model(inputs = inputs, outputs = results);
-
-def TextSelfAttention(hidden_dim = 1024, num_heads = 16, **kwargs):
-  inputs = tf.keras.Input((None, hidden_dim)); # inputs.shape = (batch, hidden_length, hidden_dim)
-  results = inputs;
-  for i in range(4):
-    results = SelfAttentionBlock(hidden_dim, num_heads, 'full', drop_rate = kwargs['drop_rate'], causal = True)(results);
-  return tf.keras.Model(inputs = inputs, outputs = results);
-
-def VideoSelfAttention(hidden_dim = 1024, num_heads = 16, origin_shape = (64, 64), **kwargs):
-  inputs = tf.keras.Input((None, hidden_dim)); # inputs.shape = (batch, hidden_length, hidden_dim)
-  results = inputs;
-  for i in range(4):
-    results = SelfAttentionBlock(hidden_dim, num_heads, 'axial', drop_rate = kwargs['drop_rate'], origin_shape = origin_shape, axial_dim = -3)(results);
-    results = SelfAttentionBlock(hidden_dim, num_heads, 'axial', drop_rate = kwargs['drop_rate'], origin_shape = origin_shape, axial_dim = -2)(results);
-    results = SelfAttentionBlock(hidden_dim, num_heads, 'axial', drop_rate = kwargs['drop_rate'], origin_shape = origin_shape, axial_dim = -1)(results);
-  return tf.keras.Model(inputs = inputs, outputs = results);
-
-def CrossAttentionBlock(hidden_dim = 1024, num_heads = 16, **kwargs):
-  query = tf.keras.Input((None, hidden_dim)); # query.shape = (batch, query_length, key_dim)
-  value = tf.keras.Input((None, hidden_dim)); # value.shape = (batch, value_length, value_dim)
-  short = query;
-  norm_query = tf.keras.layers.LayerNormalization()(query); # norm_query.shape = (batch, query_length, key_dim)
-  norm_value = tf.keras.layers.LayerNormalization()(value); # norm_value.shape = (batch, value_length, value_dim)
-  mask = tf.keras.layers.Lambda(lambda x: tf.ones((tf.shape(x[0])[0],1,tf.shape(x[0])[1], tf.shape(x[1])[1])))([query, value]); # mask.shape = (batch, 1, query_length, value_length)
-  results = MultiHeadAttention(hidden_dim, hidden_dim, num_heads, 'full', drop_rate = kwargs['drop_rate'], causal = False)([query, value, value, mask]); # results.shape = (batch, query_length, hidden_dim)
-  results = tf.keras.layers.Dropout(kwargs['drop_rate'])(results); # results.shape = (batch, query_length, hidden_dim)
-  results = tf.keras.layers.Add()([results,short]); # results.shape = (batch, query_length, hidden_dim)
-  short = results;
-  results = tf.keras.layers.LayerNormalization()(results); # results.shape = (batch, query_length, hidden_dim)
-  results = tf.keras.layers.Dense(hidden_dim * 4)(results); # results.shape = (batch, query_length, 4 * hidden_dim)
-  results = tfa.layers.GELU()(results); # results.shape = (batch, query_length, 4 * hidden_dim)
-  results = tf.keras.layers.Dense(hidden_dim)(results); # results.shape = (batch, query_length, hidden_dim)
-  results = tf.keras.layers.Dropout(kwargs['drop_rate'])(results); # results.shape = (batch, query_length, hidden_dim)
-  results = tf.keras.layers.Add()([results, short]); # results.shape = (batch, query_length, hidden_dim)
-  return tf.keras.Model(inputs = (query, value), outputs = results);
-
 def PositionalEncoding(d_model):
   # 1) inputs
   inputs = tf.keras.Input((None, d_model)); # inputs.shape = (batch, length, dimension)
@@ -469,7 +417,66 @@ def PositionalEncoding(d_model):
   results = tf.keras.layers.Add()([inputs, pos_encoding]);                                                                                   # results.shape = (batch, length, dimension)
   return tf.keras.Model(inputs = inputs, outputs = results);
 
-def Transformer(hidden_dim = 128, num_heads = 16, origin_shape = (64, 64), text_vocab_size = None, **kwargs):
+def EncoderLayer(hidden_dim = 1024, num_heads = 16, **kwargs):
+  # NOTE: this sparse transformer residual block is for decoder only transformer
+  inputs = tf.keras.Input((None, hidden_dim,)); # inputs.shape = (batch, hidden_length, hidden_dim)
+  short = inputs;
+  results = tf.keras.layers.LayerNormalization()(inputs); # results.shape = (batch, hidden_length, hidden_dim)
+  results = MultiHeadAttention(hidden_dim, hidden_dim, num_heads, attn_type = 'full', **kwargs)([results, results, results]); # results.shape = (batch, hidden_length, hidden_dim)
+  results = tf.keras.layers.Dropout(kwargs['drop_rate'])(results); # results.shape = (batch, hidden_length, hidden_dim)
+  results = tf.keras.layers.Add()([results, short]); # results.shape = (batch, hidden_length, hidden_dim)
+  short = results;
+  results = tf.keras.layers.LayerNormalization()(results); # results.shape = (batch, hidden_length, hidden_dim)
+  results = tf.keras.layers.Dense(hidden_dim * 4)(results); # results.shape = (batch, hidden_length, 4 * hidden_dim)
+  results = tfa.layers.GELU()(results); # results.shape = (batch, hidden, 4 * hidden_dim)
+  results = tf.keras.layers.Dense(hidden_dim)(results);  # results.shape = (batch, hidden_length, hidden_dim)
+  results = tf.keras.layers.Dropout(kwargs['drop_rate'])(results); # results.shape = (batch, hidden_length, hidden_dim)
+  results = tf.keras.layers.Add()([results, short]); # results.shape = (batch, hidden_length, hidden_dim)
+  return tf.keras.Model(inputs = inputs, outputs = results);
+
+def Encoder(num_layers = 2, hidden_dim = 1024, num_heads = 16, **kwargs):
+  inputs = tf.keras.Input((None, hidden_dim));
+  embeddings = PositionalEncoding(hidden_dim)(inputs);
+  outputs = tf.keras.layers.Dropout(rate = kwargs['drop_rate'])(embeddings);
+  for i in range(num_layers):
+    outputs = EncoderLayer(hidden_dim, num_heads, drop_rate = kwargs['drop_rate'], causal = True)(outputs);
+  return tf.keras.Model(inputs = inputs, outputs = outputs);
+
+def DecoderLayer(hidden_dim = 1024, num_heads = 16, **kwargs):
+  inputs = tf.keras.Input((None, hidden_dim,));
+  code = tf.keras.Input((None, hidden_dim));
+  short = inputs;
+  results = tf.keras.layers.LayerNormalization()(inputs);
+  results = MultiHeadAttention(hidden_dim, hidden_dim, num_heads, attn_type = 'axial', drop_rate = kwargs['drop_rate'], origin_shape = kwargs['origin_shape'], axial_dim = kwargs['axial_dim'])([results, results, results]);
+  results = tf.keras.layers.Dropout(kwargs['drop_rate'])(results);
+  results = tf.keras.layers.Add()([results, short]);
+  mask = tf.keras.layers.Lambda(lambda x: tf.ones((tf.shape(x[0])[0],1,tf.shape(x[0])[1], tf.shape(x[1])[1])))([inputs, code]);
+  short = results;
+  results = tf.keras.layers.LayerNormalization()(results);
+  results = MultiHeadAttention(hidden_dim, hidden_dim, num_heads, 'full', drop_rate = kwargs['drop_rate'], causal = False)([results, code, code, mask]);
+  results = tf.keras.layers.Dropout(kwargs['drop_rate'])(results);
+  results = tf.keras.layers.Add()([results, short]);
+  short = results;
+  results = tf.keras.layers.LayerNormalization()(results);
+  results = tf.keras.layers.Dense(hidden_dim * 4)(results);
+  results = tfa.layers.GELU()(results);
+  results = tf.keras.layers.Dense(hidden_dim)(results);
+  results = tf.keras.layers.Dropout(kwargs['drop_rate'])(results);
+  results = tf.keras.layers.Add()([results, short]);
+  return tf.keras.Model(inputs = (inputs, code), outputs = results);
+
+def Decoder(num_layers = 4, hidden_dim = 1024, num_heads = 16, **kwargs):
+  inputs = tf.keras.Input((None, hidden_dim));
+  code = tf.keras.Input((None, hidden_dim));
+  embeddings = PositionalEncoding(hidden_dim)(inputs);
+  outputs = tf.keras.layers.Dropout(rate = kwargs['drop_rate'])(embeddings);
+  for i in range(num_layers):
+    outputs = DecoderLayer(hidden_dim, num_heads, drop_rate = kwargs['drop_rate'], origin_shape = kwargs['origin_shape'], axial_dim = -3)([outputs, code]);
+    outputs = DecoderLayer(hidden_dim, num_heads, drop_rate = kwargs['drop_rate'], origin_shape = kwargs['origin_shape'], axial_dim = -2)([outputs, code]);
+    outputs = DecoderLayer(hidden_dim, num_heads, drop_rate = kwargs['drop_rate'], origin_shape = kwargs['origin_shape'], axial_dim = -1)([outputs, code]);
+  return tf.keras.Model(inputs = (inputs, code), outputs = outputs);
+
+def Transformer(encoder_layers = 2, decoder_layers = 4, hidden_dim = 128, num_heads = 16, origin_shape = (64, 64), text_vocab_size = None, video_vocab_size = 10000, **kwargs):
   text_inputs = tf.keras.Input((None,)); # inputs.shape = (batch, text_length)
   # INFO: to avoid repeat calculating embedding of leading frames, the input uses code from VQVAE, but leading frames
   # NOTE: video_top_inputs.shape[1] = origin_shape[1] // 8 * origin_shape[2] // 8 * frame_number
@@ -479,13 +486,13 @@ def Transformer(hidden_dim = 128, num_heads = 16, origin_shape = (64, 64), text_
   
   text_embed = tf.keras.layers.Embedding(text_vocab_size, hidden_dim)(text_inputs);
   text_embed = tf.keras.layers.Lambda(lambda x, d: tf.math.sqrt(tf.cast(d, dtype = tf.float32)) * x, arguments = {'d': hidden_dim})(text_embed);
-  text_embed = PositionalEncoding(hidden_dim)(text_embed); # text_embed.shape = (batch, text_length, hidden_dim)
-  text_code = TextSelfAttention(hidden_dim, num_heads, drop_rate = kwargs['drop_rate'])(text_embed); # text_code.shape = (batch, text_length, hidden_dim)
-  video_top_code = VideoSelfAttention(hidden_dim, num_heads, drop_rate = kwargs['drop_rate'], origin_shape = (origin_shape[0] // 8, origin_shape[1] // 8))(video_top_inputs);
-  video_bottom_code = VideoSelfAttention(hidden_dim, num_heads, drop_rate = kwargs['drop_rate'], origin_shape = (origin_shape[0] // 4, origin_shape[1] // 4))(video_bottom_inputs);
-  video_top_attended = CrossAttentionBlock(hidden_dim, num_heads, drop_rate = kwargs['drop_rate'])([video_top_code, text_code]);
-  video_bottom_attended = CrossAttentionBlock(hidden_dim, num_heads, drop_rate = kwargs['drop_rate'])([video_bottom_code, text_code]);
-  return tf.keras.Model(inputs = (text_inputs, video_top_inputs, video_bottom_inputs), outputs = (video_top_attended, video_bottom_attended));
+  
+  text_code = Encoder(encoder_layers, hidden_dim, num_heads, drop_rate = kwargs['drop_rate'])(text_embed); # text_code.shape = (batch, text_length, hidden_dim)
+  video_top_code = Decoder(decoder_layers, hidden_dim, num_heads, drop_rate = kwargs['drop_rate'], origin_shape = (origin_shape[0] // 8, origin_shape[1] // 8))([video_top_inputs, text_code]);
+  video_bottom_code = Decoder(decoder_layers, hidden_dim, num_heads, drop_rate = kwargs['drop_rate'], origin_shape = (origin_shape[0] // 4, origin_shape[1] // 4))([video_bottom_inputs, text_code]);
+  video_top = tf.keras.layers.Dense(units = video_vocab_size, activation = tf.keras.activations.softmax)(video_top_code);
+  video_bottom = tf.keras.layers.Dense(units = video_vocab_size, activation = tf.keras.activations.softmax)(video_bottom_code);
+  return tf.keras.Model(inputs = (text_inputs, video_top_inputs, video_bottom_inputs), outputs = (video_top, video_bottom));
 
 if __name__ == "__main__":
 
