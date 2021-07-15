@@ -542,12 +542,7 @@ class GODIVA(tf.keras.Model):
 
 if __name__ == "__main__":
 
-  transformer = Transformer(text_vocab_size = 10, origin_shape = (8, 8), drop_rate = 0.2);
-  text = np.random.randint(low = 0, high = 10, size = (4, 34));
-  top = np.random.normal(size = (4, 3 * 8 * 8, 128));
-  top = transformer([text, top]);
-  print(top.shape);
-  top = np.random.normal(size = (4, 4 * 8 * 8, 128));
-  top = transformer([text, top]);
-  print(top.shape);
-  transformer.save('transformer.h5');
+  tokens = np.random.randint(low = 0, high = 10, size = (4, 34));
+  godiva = GODIVA(text_vocab_size = 10);
+  top_tokens, bottom_tokens = godiva(tokens);
+  print(top_tokens.shape, bottom_tokens.shape);
