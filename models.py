@@ -501,16 +501,16 @@ def Transformer(encoder_layers = 2, decoder_layers = 2, hidden_dim = 128, num_he
 
 class GODIVA(tf.keras.Model):
   def __init__(self, vq_type = 'ema_update', vq_encoder_model = join('models', 'encoder_d128_c10000_64x64.h5'), vq_decoder_model = join('models', 'decoder_d128_c10000_64x64.h5'), origin_shape = (64, 64), video_length = 10, text_vocab_size = None, video_vocab_size = 10000, **kwargs):
+    super(GODIVA, self).__init__(**kwargs);
     self.origin_shape = origin_shape;
     self.video_length = video_length;
     self.video_vocab_size = video_vocab_size;
     self.encoder = tf.keras.models.load_model(vq_encoder_model, custom_objects = {'Quantize': Quantize, 'QuantizeEma': QuantizeEma});
-    self.decoder = tf.keras.models.load_model(vq_deocder_model);
+    self.decoder = tf.keras.models.load_model(vq_decoder_model);
     self.encoder.trainable = False;
     self.decoder.trainable = False;
-    self.top_transformer = Transformer(origin_shape = (origin_shape[0] // 8, origin_shape[1] // 8), text_vocab_size = text_vocab_size, video_vocab_size = video_vocab_size + 2);
-    self.bottom_transformer = Transformer(origin_shape = (origin_shape[0] // 4, origin_shape[1] // 4), text_vocab_size = text_vocab_size, video_vocab_size = video_vocab_size + 2);
-    super(self, GODIVA).__init__(**kwargs);
+    self.top_transformer = Transformer(origin_shape = (origin_shape[0] // 8, origin_shape[1] // 8), text_vocab_size = text_vocab_size, video_vocab_size = video_vocab_size + 2, drop_rate = 0.2);
+    self.bottom_transformer = Transformer(origin_shape = (origin_shape[0] // 4, origin_shape[1] // 4), text_vocab_size = text_vocab_size, video_vocab_size = video_vocab_size + 2, drop_rate = 0.2);
   def call(inputs):
     # NOTE: inputs.shape = (batch, max_seq_length)
     top_tokens = tf.ones((tf.shape(inputs)[0], 1), dtype = tf.int32) * (self.video_vocab_size + 1); # top_tokens.shape = (batch, 1)
