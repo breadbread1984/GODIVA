@@ -22,17 +22,17 @@ def main(filename, text_vocab_size):
     # video_token_t.shape = (batch * length, h/8, w/8,)
     # video_token_b.shape = (batch * length, h/4, w/4,)
     quantized_t, video_token_t, _, quantized_b, video_token_b, _ = godiva.encoder(video);
-    video_token_t = tf.reshape(video_token_t, (batch_size, 10, -1)); # video_token_t.shape = (batch, length, h/8 * w/8)
-    video_token_b = tf.reshape(video_token_b, (batch_size, 10, -1)); # video_token_b.shape = (batch, length, h/4 * w/4)
-    print(video_token_t.shape, video_token_b.shape)
-    exit()
+    video_token_t = tf.reshape(video_token_t, (batch_size, 16, -1)); # video_token_t.shape = (batch, length, h/8 * w/8)
+    video_token_b = tf.reshape(video_token_b, (batch_size, 16, -1)); # video_token_b.shape = (batch, length, h/4 * w/4)
+
   # TODO
   
 if __name__ == "__main__":
 
   from sys import argv;
   if len(argv) != 2:
-    print('Usage: %s (single|double)' % argv[0]);
+    print('Usage: %s (single|double)' % argv[0]);ls
+    dfs
     exit(1);
   assert argv[1] in ['single','double'];
   if argv[1] == 'single':
