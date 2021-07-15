@@ -500,7 +500,7 @@ def Transformer(encoder_layers = 2, decoder_layers = 2, hidden_dim = 128, num_he
   return tf.keras.Model(inputs = (text_inputs, video_inputs), outputs = video_pred);
 
 class GODIVA(tf.keras.Model):
-  def __init__(self, vq_type = 'ema_update', vq_encoder_model = join('models', 'encoder_d128_c10000_64x64.h5'), vq_decoder_model = join('models', 'decoder_d128_c10000_64x64.h5'), origin_shape = (64, 64), video_length = 10, text_vocab_size = None, video_vocab_size = 10000, **kwargs):
+  def __init__(self, vq_type = 'ema_update', vq_encoder_model = join('models', 'encoder_d128_c10000_64x64.h5'), vq_decoder_model = join('models', 'decoder_d128_c10000_64x64.h5'), origin_shape = (64, 64), video_length = 16, text_vocab_size = None, video_vocab_size = 10000, **kwargs):
     super(GODIVA, self).__init__(**kwargs);
     self.origin_shape = origin_shape;
     self.video_length = video_length;
@@ -559,7 +559,7 @@ if __name__ == "__main__":
   print(top.shape);
   transformer.save('transformer.h5');
   
-  tokens = np.random.randint(low = 0, high = 10, size = (4, 34));
+  tokens = np.random.randint(low = 0, high = 10, size = (1, 34));
   godiva = GODIVA(text_vocab_size = 10);
   top_tokens, bottom_tokens = godiva(tokens);
   print(top_tokens.shape, bottom_tokens.shape);

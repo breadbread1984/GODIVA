@@ -13,6 +13,19 @@ def main(filename, text_vocab_size):
   trainset_iter = iter(trainset);
   # create godiva
   godiva = GODIVA(text_vocab_size = text_vocab_size);
+  while True:
+    # video.shape = (batch, frame, h, w, 3)
+    # text.shape = (batch, seq_length)
+    video, text = next(trainset_iter);
+    video = tf.reshape(video, (tf.shape(video)[0] * tf.shape(video)[1], *tf.shape(video)[-3:])); # video.shape = (batch * length, h, w, 1)
+    video = tf.tile(video, (1,1,1,3)); # video.shape = (batch * length, h, w, 3)
+    # video_token_t.shape = (batch * length, h/8, w/8,)
+    # video_token_b.shape = (batch * length, h/4, w/4,)
+    quantized_t, video_token_t, _, quantized_b, video_token_b, _ = godiva.encoder(video);
+    video_token_t = tf.reshape(video_token_t, (batch_size, 10, -1)); # video_token_t.shape = (batch, length, h/8 * w/8)
+    video_token_b = tf.reshape(video_token_b, (batch_size, 10, -1)); # video_token_b.shape = (batch, length, h/4 * w/4)
+    print(video_token_t.shape, video_token_b.shape)
+    exit()
   # TODO
   
 if __name__ == "__main__":
