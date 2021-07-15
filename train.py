@@ -35,10 +35,10 @@ def main(filename, text_vocab_size):
     quantized_t, video_token_t, _, quantized_b, video_token_b, _ = godiva.encoder(video);
     video_token_t = tf.reshape(video_token_t, (batch_size, -1)); # video_token_t.shape = (batch, length * h/8 * w/8)
     video_token_b = tf.reshape(video_token_b, (batch_size, -1)); # video_token_b.shape = (batch, length * h/4 * w/4)
-    top_sos = tf.ones((batch_size, godiva.top_frame_token_num)) * godiva.SOS;
-    bottom_sos = tf.ones((batch_size, godiva.bottom_frame_token_num)) * godiva.SOS;
-    top_eos = tf.ones((batch_size, godiva.top_frame_token_num)) * godiva.EOS;
-    bottom_eos = tf.ones((batch_size, godiva.bottom_frame_token_num)) * godiva.EOS;
+    top_sos = tf.ones((batch_size, godiva.top_frame_token_num), dtype = tf.int64) * godiva.SOS;
+    bottom_sos = tf.ones((batch_size, godiva.bottom_frame_token_num), dtype = tf.int64) * godiva.SOS;
+    top_eos = tf.ones((batch_size, godiva.top_frame_token_num), dtype = tf.int64) * godiva.EOS;
+    bottom_eos = tf.ones((batch_size, godiva.bottom_frame_token_num), dtype = tf.int64) * godiva.EOS;
     top_inputs = tf.concat([top_sos, video_token_t], axis = -1);
     bottom_inputs = tf.concat([bottom_sos, video_token_b], axis = -1);
     top_outputs = tf.concat([video_token_t, top_eos], axis = -1);
