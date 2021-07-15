@@ -538,8 +538,8 @@ class GODIVA(tf.keras.Model):
     bottom_tokens = bottom_tokens[:,self.bottom_frame_token_num:-self.bottom_frame_token_num]; # strip start and end tokens
     top_embeddings = tf.nn.embedding_lookup(tf.transpose(top_embed_mat), top_tokens); # top_embeddings.shape = (batch, length * size//8 * size//8, embed_dim)
     bottom_embeddings = tf.nn.embedding_lookup(tf.transpose(bottom_embed_mat), bottom_tokens); # bottom_embedding.shape = (batch, length * size//4 * size//4, embed_dim)
-    top_embeddings = tf.reshape(top_embeddings, (tf.shape(top_embeddings)[0], self.video_length, -1, tf.shape(top_embeddings)[-1]));
-    bottom_embeddings = tf.reshape(bottom_embeddings, (tf.shape(bottom_embeddings)[0], self.video_length, -1, tf.shape(bottom_embeddings)[-1]));
+    top_embeddings = tf.reshape(top_embeddings, (tf.shape(top_embeddings)[0], self.video_length, self.origin_shape[0]//8, self.origin_shape[1]//8, tf.shape(top_embeddings)[-1])); # top_embeddings.shape = (batch, length, size//8, size//8, embed_dim)
+    bottom_embeddings = tf.reshape(bottom_embeddings, (tf.shape(bottom_embeddings)[0], self.video_length, self.origin_shape[0]//4, self.origin_shape[1]//4, tf.shape(bottom_embeddings)[-1])); # bottom_embeddings.shape = (batch, length, size//4, size//4, embed_dim)
     video = list();
     for i in range(self.video_length):
       frame = self.decoder([top_embeddings[:, i, ...], bottom_embeddings[:, i, ...]]); # frame.shape = (batch, 64, 64, 3)
