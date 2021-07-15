@@ -518,8 +518,8 @@ class GODIVA(tf.keras.Model):
   def call(self, inputs):
     # NOTE: top_tokens of the first frame is full of SOS tokens
     # NOTE: bottom_tokens of the first frame is full of SOS tokens
-    top_tokens = tf.ones((tf.shape(inputs)[0], self.top_frame_token_num), dtype = tf.int32) * self.SOS; # top_tokens.shape = (batch, (origin_shape // 8) ** 2)
-    bottom_tokens = tf.ones((tf.shape(inputs)[0], self.bottom_frame_token_num), dtype = tf.int32) * self.SOS; # bottom_tokens.shape = (batch, (origin_shape // 4) ** 2)
+    top_tokens = tf.ones((tf.shape(inputs)[0], self.top_frame_token_num), dtype = tf.int64) * self.SOS; # top_tokens.shape = (batch, (origin_shape // 8) ** 2)
+    bottom_tokens = tf.ones((tf.shape(inputs)[0], self.bottom_frame_token_num), dtype = tf.int64) * self.SOS; # bottom_tokens.shape = (batch, (origin_shape // 4) ** 2)
     for i in range(self.video_length + 1):
       top_pred = self.top_transformer([inputs, top_tokens]); # top_pred.shape = (batch, length, video_vocab_size)
       tokens = tf.math.argmax(top_pred, axis = -1); # tokens.shape = (batch, length)
