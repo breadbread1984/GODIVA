@@ -32,3 +32,23 @@ here are some reconstruction examples.
    <tr><td><img src="pics/car.png" /></td><td><img src="pics/cat.png" /></td><td><img src="pics/house.png" /></td><td><img src="pics/people.png"></td></tr>
  </table>
 </p>
+
+## generate moving mnist dataset
+
+create moving single digit dataset with command
+
+```shell
+python3 dataset/mnist_caption_single.py
+```
+
+after executing successfully, a file named mnist_single_git.h5 is generated.
+
+create moving double digits dataset with command
+
+```shell
+python3 dataset/mnist_caption_two_digit.py
+```
+
+after executing successfully, a file named mnist_two_gif.h5 is generated.
+the dataset creation code is borrowed from [Sync-Draw](https://github.com/syncdraw/Sync-DRAW/tree/master/dataset) and slightly modified.
+
