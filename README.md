@@ -52,3 +52,10 @@ python3 dataset/mnist_caption_two_digit.py
 after executing successfully, a file named mnist_two_gif.h5 is generated.
 the dataset creation code is borrowed from [Sync-Draw](https://github.com/syncdraw/Sync-DRAW/tree/master/dataset) and slightly modified.
 
+## train GODIVA on moving mnist dataset
+
+train GODIVA with command
+
+```shell
+python3 train.py (single|double)
+```
