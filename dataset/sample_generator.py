@@ -18,13 +18,13 @@ class SampleGenerator(object):
     def gen():
       for i in range(data.shape[0]):
         sample = np.transpose(data[i], (0,2,3,1));
-        caption = caption[i];
-        yield sample, caption;
+        text = caption[i];
+        yield sample, text;
     return gen;
   def get_trainset(self,):
-    return tf.data.Dataset.from_generator(self.sample_generator(True), (tf.float32, tf.int64), (tf.TensorShape([16,64,64,1]), tf.TensorShape([9,]), tf.TensorShape([]))).repeat(-1);
+    return tf.data.Dataset.from_generator(self.sample_generator(True), (tf.float32, tf.int64), (tf.TensorShape([16,64,64,1]), tf.TensorShape([9,]))).repeat(-1);
   def get_testset(self):
-    return tf.data.Dataset.from_generator(self.sample_generator(False), (tf.float32, tf.int64), (tf.TensorShape([16,64,64,1]), tf.TensorShape([9,]), tf.TensorShape([]))).repeat(-1);
+    return tf.data.Dataset.from_generator(self.sample_generator(False), (tf.float32, tf.int64), (tf.TensorShape([16,64,64,1]), tf.TensorShape([9,]))).repeat(-1);
 
 if __name__ == "__main__":
 
