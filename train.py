@@ -73,7 +73,6 @@ if __name__ == "__main__":
   from sys import argv;
   if len(argv) != 2:
     print('Usage: %s (single|double)' % argv[0]);
-    dfs
     exit(1);
   assert argv[1] in ['single','double'];
   if argv[1] == 'single':
