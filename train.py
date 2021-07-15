@@ -57,7 +57,16 @@ def main(filename, text_vocab_size):
     bottom_grads = bottom_tape.gradient(bottom_loss, godiva.bottom_transformer.trainable_variables);
     top_optimizer.apply_gradient(zip(top_grads, top_transformer.trainable_variables));
     bottom_optimizer.apply_gradient(zip(bottom_grads, bottom_transformer.trainable_variables));
-  # TODO
+    # 5) save checkpoint
+    if tf.equal(top_optimizer.iterations % 10000, 0):
+      checkpoint.save(join('checkpoints', 'ckpt'));
+    if tf.equal(top_optimizer.iterations % 100, 0):
+      with log.as_default():
+        tf.summary.scale('top loss', top_avg_loss.result(), step = top_optimizer.iterations);
+        tf.summary.scale('bottom loss', bottom_avg_loss.result(), step = bottom_optimizer.iterations);
+      print('#%d top loss: %f bottom loss: %f' % (top_optimizer.iterations, top_avg_loss.result(), bottom_avg_loss.result()));
+      top_avg_loss.reset_states();
+      bottom_avg_loss.reset_states();
   
 if __name__ == "__main__":
 
