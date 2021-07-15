@@ -505,6 +505,8 @@ class GODIVA(tf.keras.Model):
     self.origin_shape = origin_shape;
     self.video_length = video_length;
     self.video_vocab_size = video_vocab_size;
+    # NOTE: tokens for vqvae are in range [0, video_vocab_size - 1]
+    # NOTE: the following two tokens are for start of string (SOS) and end of string (EOS)
     self.SOS = self.video_vocab_size;
     self.EOS = self.video_vocab_size + 1;
     self.top_frame_token_num = self.origin_shape[0] // 8 * self.origin_shape[1] // 8;
@@ -523,11 +525,11 @@ class GODIVA(tf.keras.Model):
     for i in range(self.video_length + 1):
       top_pred = self.top_transformer([inputs, top_tokens]); # top_pred.shape = (batch, length, video_vocab_size)
       tokens = tf.math.argmax(top_pred, axis = -1); # tokens.shape = (batch, length)
-      top_tokens = tf.concat([top_tokens, tokens[:,-self.top_frame_token_num]], axis = 1); # top_tokens.shape = (batch, length)
+      top_tokens = tf.concat([top_tokens, tokens[:,-self.top_frame_token_num:]], axis = 1); # top_tokens.shape = (batch, length)
     for i in range(self.video_length + 1):
       bottom_pred = self.bottom_transformer([inputs, bottom_tokens]);
       tokens = tf.math.argmax(bottom_pred, axis = -1); # tokens.shape = (batch, length)
-      bottom_tokens = tf.concat([bottom_tokens, tokens[:,-self.bottom_frame_token_num]], axis = 1); # bottom_tokens.shape = (batch, 1+length)
+      bottom_tokens = tf.concat([bottom_tokens, tokens[:,-self.bottom_frame_token_num:]], axis = 1); # bottom_tokens.shape = (batch, 1+length)
     return top_tokens, bottom_tokens;
   def decode(self, top_tokens, bottom_tokens):
     top_embed_mat = self.encoder.layers[4].get_embed();
@@ -561,4 +563,4 @@ if __name__ == "__main__":
   godiva = GODIVA(text_vocab_size = 10);
   top_tokens, bottom_tokens = godiva(tokens);
   print(top_tokens.shape, bottom_tokens.shape);
-
+  godiva.save_weights('godiva.h5');
