@@ -26,6 +26,10 @@ class SampleGenerator(object):
   def get_testset(self):
     return tf.data.Dataset.from_generator(self.sample_generator(False), (tf.float32, tf.int64), (tf.TensorShape([16,64,64,1]), tf.TensorShape([9,]))).repeat(-1);
 
+def parse_function(sample, text):
+  sample = sample / 255. - 0.5;
+  return sample, text;
+
 if __name__ == "__main__":
 
   import cv2;
