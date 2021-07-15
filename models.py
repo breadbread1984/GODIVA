@@ -511,7 +511,7 @@ class GODIVA(tf.keras.Model):
     self.decoder.trainable = False;
     self.top_transformer = Transformer(origin_shape = (origin_shape[0] // 8, origin_shape[1] // 8), text_vocab_size = text_vocab_size, video_vocab_size = video_vocab_size + 2, drop_rate = 0.2);
     self.bottom_transformer = Transformer(origin_shape = (origin_shape[0] // 4, origin_shape[1] // 4), text_vocab_size = text_vocab_size, video_vocab_size = video_vocab_size + 2, drop_rate = 0.2);
-  def call(inputs):
+  def call(self, inputs):
     # NOTE: inputs.shape = (batch, max_seq_length)
     top_tokens = tf.ones((tf.shape(inputs)[0], 1), dtype = tf.int32) * (self.video_vocab_size + 1); # top_tokens.shape = (batch, 1)
     bottom_tokens = tf.ones((tf.shape(inputs)[0], 1), dtype = tf.int32) * (self.video_vocab_size + 1); # bottom_tokens.shape = (batch, 1)
