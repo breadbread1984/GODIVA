@@ -46,10 +46,10 @@ def main(filename, text_vocab_size):
     # 3) predict and loss
     with tf.GradientTape() as top_tape:
       top_preds = godiva.top_transformer([text, top_inputs]); # top_preds.shape = (batch, length, video_vocab_size + 2)
-      top_loss = tf.keras.losses.SparseCategoricalCrossentropy(top_outputs, top_preds)
+      top_loss = tf.keras.losses.SparseCategoricalCrossentropy()(top_outputs, top_preds)
     with tf.GradientTape() as bottom_tape:
       bottom_preds = godiva.bottom_transformer([text, bottom_inputs]); # bottom_preds.shape = (batch, length, video_vocab_size + 2)
-      bottom_loss = tf.keras.losses.SparseCategoricalCrossentropy(bottom_outputs, bottom_preds);
+      bottom_loss = tf.keras.losses.SparseCategoricalCrossentropy()(bottom_outputs, bottom_preds);
     # 4) gradient
     top_avg_loss.update_state(top_loss);
     bottom_avg_loss.update_state(bottom_loss);
