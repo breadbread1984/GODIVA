@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 
+from os import mkdir;
 from os.path import exists, join;
 from absl import flags, app;
 import tensorflow as tf;
@@ -9,10 +10,12 @@ from create_dataset import parse_function_generator, load_dataset;
 FLAGS = flags.FLAGS;
 flags.DEFINE_integer('batch_size', default = 128, help = 'batch size');
 flags.DEFINE_integer('img_size', default = 64, help = 'image size');
+flags.DEFINE_integer('token_num', default = 10000, help = 'how many tokens in code book');
 flags.DEFINE_enum('type', default = 'ema_update', enum_values = ['original', 'ema_update'], help = 'quantization type');
 flags.DEFINE_string('train_dir', default = 'trainsets', help = 'directory containing training samples');
 flags.DEFINE_string('test_dir', default = 'testsets', help = 'directory containing testing samples');
-flags.DEFINE_boolean('save_model', default = False, help = 'whether to save model');
+flags.DEFINE_enum('mode', default = 'train', enum_values = ['train', 'save', 'test'], help = 'mode to run');
+flags.DEFINE_string('img', default = None, help = 'image to predict on');
 
 def recon_loss(labels, outputs):
   return tf.keras.losses.MeanSquaredError()(labels, outputs);
@@ -56,7 +59,7 @@ def pretrain():
     trainer = tf.keras.models.load_model('./checkpoints/ckpt', custom_objects = {'tf': tf, 'Quantize': Quantize, 'QuantizeEma': QuantizeEma, 'recon_loss': recon_loss, 'quant_loss': quant_loss}, compile = True);
     optimizer = trainer.optimizer;
   else:
-    trainer = VQVAE_Trainer(quantize_type = FLAGS.type);
+    trainer = VQVAE_Trainer(n_embed = FLAGS.token_num, quantize_type = FLAGS.type);
     optimizer = tf.keras.optimizers.Adam(3e-4);
     trainer.compile(optimizer = optimizer, loss = {'output_1': recon_loss, 'output_2': quant_loss}, loss_weights = {'output_1': 1,'output_2': 1});
 
@@ -77,14 +80,36 @@ def save_model():
   if FLAGS.type == 'ema_update':
     trainer.layers[1].layers[4].set_trainable(False);
     trainer.layers[1].layers[8].set_trainable(False);
+  if not exists('models'): mkdir('models');
   trainer.layers[1].save(join('models', 'encoder.h5'));
   trainer.layers[1].save(join('models', 'decoder.h5'));
 
+def test():
+  import cv2;
+  img = cv2.imread(FLAGS.img);
+  if img is None:
+    raise Exception('invalid image path');
+  encoder = tf.keras.models.load_model(join('models', 'encoder.h5'), custom_objects = {'Quantize': Quantize, 'QuantizeEma': QuantizeEma});
+  decoder = tf.keras.models.load_model(join('models', 'decoder.h5'));
+  resized = cv2.resize(img, (FLAGS.img_size, FLAGS.img_size)) / 255.;
+  normalized = (resized - tf.reshape([0.5,0.5,0.5], (1,1,-1))) / tf.reshape([0.5,0.5,0.5], (1,1,-1));
+  inputs = np.expand_dims(normalized, axis = 0);
+  quantized_t, cluster_index_t, loss_t, quantized_b, cluster_index_b, loss_b = encoder(inputs);
+  recon = decoder([quantized_t, quantized_b]);
+  recon_img = tf.squeeze(recon, axis = 0).numpy() * np.reshape([0.5,0.5,0.5], (1, 1, -1)) + np.reshape([0.5,0.5,0.5], (1, 1, -1));
+  recon_img = 255. * recon_img;
+  cv2.imshow('reconstructed', recon_img.astype(np.uint8));
+  cv2.waitKey();
+
 def main(unused_argv):
-  if FLAGS.save_model:
+  if FLAGS.mode == 'save':
     save_model();
-  else:
+  elif FLAGS.mode == 'train':
     pretrain();
+  elif FLAGS.mode == 'test':
+    test();
+  else:
+    raise Exception('unknow mode!');
 
 if __name__ == "__main__":
   app.run(main);
