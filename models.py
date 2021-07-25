@@ -156,7 +156,7 @@ def VQVAE_Decoder(in_channels = 3, hidden_channels = 128, block_num = 2, res_cha
   results = Decoder(2 * embed_dim, in_channels, hidden_channels, block_num, res_channels, 4)(results); # results.shape = (batch, h, w, 3)
   return tf.keras.Model(inputs = (quantized_t, quantized_b), outputs = results, name = name);
 
-VQVAE_Trainer(in_channels = 3, hidden_channels = 128, block_num = 2, res_channels = 32, embed_dim = 128, n_embed = 10000, quantize_type = 'original'):
+def VQVAE_Trainer(in_channels = 3, hidden_channels = 128, block_num = 2, res_channels = 32, embed_dim = 128, n_embed = 10000, quantize_type = 'original'):
   inputs = tf.keras.Input((None, None, in_channels));
   quantized_t, cluster_index_t, loss_t, quantized_b, cluster_index_b, loss_b = VQVAE_Encoder(in_channels, hidden_channels, block_num, res_channels, embed_dim, n_embed, quantize_type)(inputs);
   recon = VQVAE_Decoder(in_channels, hidden_channels, block_num, res_channels, embed_dim)([quantized_t, quantized_b]);
