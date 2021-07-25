@@ -14,7 +14,7 @@ python3 pretrain.py --mode train --type (original|ema_update) --train_dir <path/
 save checkpoint to pretrain model file with command
 
 ```shell
-python3 pretrain.py --mode save --type (original|ema_update) --save_model
+python3 pretrain.py --mode save --type (original|ema_update)
 ```
 
 test pretrained model with command
