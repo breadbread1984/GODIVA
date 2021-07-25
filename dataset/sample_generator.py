@@ -1,8 +1,10 @@
 #!/usr/bin/python3
 
 import h5py;
+from os.path import join;
 import numpy as np;
 import tensorflow as tf;
+from models import Quantize, QuantizeEma;
 
 class SampleGenerator(object):  
   def __init__(self, filename):
@@ -26,9 +28,33 @@ class SampleGenerator(object):
   def get_testset(self):
     return tf.data.Dataset.from_generator(self.sample_generator(False), (tf.float32, tf.int64), (tf.TensorShape([16,64,64,1]), tf.TensorShape([9,]))).repeat(-1);
 
-def parse_function(sample, text):
-  sample = sample / 255. - 0.5;
-  return sample, text;
+class parse_function(object):
+  def __init__(self, img_size = 64, encoder = join('models', 'encoder.h5'), decoder = join('models', 'decoder.h5')):
+    self.encoder = tf.keras.models.load_model(encoder, custom_objects = {'Quantize': Quantize, 'QuantizeEma': QuantizeEma});
+    self.decoder = tf.keras.models.load_model(decoder);
+    top_quantize = self.encoder.layers[4];
+    top_embed_tab = top_quantize.get_embed();
+    top_vocab_size = tf.shape(top_embed_tab)[-1];
+    bottom_quantize = self.encoder.layers[8];
+    bottom_embed_tab = bottom_quantize.get_embed();
+    bottom_vocab_size = tf.shape(bottom_embed_tab)[-1];
+    self.top_SOS = top_vocab_size;
+    self.top_EOS = top_vocab_size + 1;
+    self.bottom_SOS = bottom_vocab_size;
+    self.bottom_EOS = bottom_vocab_size + 1;
+    self.top_frame_token_num = img_size // 8 * img_size // 8;
+    self.bottom_frame_token_num = img_size // 4 * img_size // 4;
+  def parse_function(self, sample, text):
+    # sample.shape = (length, height, width, channel)
+    # text.shape = (length)
+    sample = sample / 255. - 0.5;
+    # tokens_t.shape = (length, h/8, h/8), tokens_b.shape = (length, h/4, w/4)
+    _, tokens_t, _, _, tokens_b, _ = self.encoder(sample);
+    token_t = tf.reshape(token_t, (-1,)); # video_token_t.shape = (length * h/8 * w/8)
+    token_b = tf.reshape(token_b, (-1,)); # video_token_b.shape = (length * h/4 * w/4)
+    inputs_t = tf.concat([tf.ones((self.top_frame_token_num,), dtype = tf.int32) * self.top_SOS, token_t, tf.ones((self.top_frame_token_num,), dtype = tf.int32) * self.top_EOS], axis = 0); # inputs_t.shape = ((length + 2) * h/8 * w/8)
+    inputs_b = tf.concat([tf.ones((self.bottom_frame_token_num,), dtype = tf.int32) * self.bottom_SOS, token_b, tf.ones((self.bottom_frame_token_num,), dtype = tf.int32) * self.bottom_EOS], axis = 0); # inputs.b.shape = ((length + 2) * h/4 * w/4)
+    return text, (inputs_t, inputs_b);
 
 if __name__ == "__main__":
 

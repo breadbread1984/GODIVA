@@ -496,26 +496,17 @@ def Transformer(encoder_layers = 2, decoder_layers = 2, hidden_dim = 128, num_he
   return tf.keras.Model(inputs = (text_inputs, video_inputs), outputs = video_pred);
 
 class GODIVA(tf.keras.Model):
-  def __init__(self, vq_type = 'ema_update', vq_encoder_model = join('models', 'encoder_d128_c10000_64x64.h5'), vq_decoder_model = join('models', 'decoder_d128_c10000_64x64.h5'), origin_shape = (64, 64), video_length = 16, text_vocab_size = None, video_vocab_size = 10000, **kwargs):
+  def __init__(self, img_size = 64, video_length = 16, text_vocab_size = None, video_vocab_size = 10000, **kwargs):
     super(GODIVA, self).__init__(**kwargs);
-    self.origin_shape = origin_shape;
     self.video_length = video_length;
-    self.video_vocab_size = video_vocab_size;
-    # NOTE: tokens for vqvae are in range [0, video_vocab_size - 1]
-    # NOTE: the following two tokens are for start of string (SOS) and end of string (EOS)
-    self.SOS = self.video_vocab_size;
-    self.EOS = self.video_vocab_size + 1;
-    self.top_frame_token_num = self.origin_shape[0] // 8 * self.origin_shape[1] // 8;
-    self.bottom_frame_token_num = self.origin_shape[0] // 4 * self.origin_shape[1] // 4;
-    self.encoder = tf.keras.models.load_model(vq_encoder_model, custom_objects = {'Quantize': Quantize, 'QuantizeEma': QuantizeEma});
-    self.decoder = tf.keras.models.load_model(vq_decoder_model);
-    self.encoder.trainable = False;
-    self.decoder.trainable = False;
-    self.top_transformer = Transformer(origin_shape = (origin_shape[0] // 8, origin_shape[1] // 8), text_vocab_size = text_vocab_size, video_vocab_size = video_vocab_size + 2, drop_rate = 0.2);
-    self.bottom_transformer = Transformer(origin_shape = (origin_shape[0] // 4, origin_shape[1] // 4), text_vocab_size = text_vocab_size, video_vocab_size = video_vocab_size + 2, drop_rate = 0.2);
+    self.top_transformer = Transformer(origin_shape = (img_size // 8, img_size // 8), text_vocab_size = text_vocab_size, video_vocab_size = video_vocab_size + 2, drop_rate = 0.2);
+    self.bottom_transformer = Transformer(origin_shape = (img_size // 4, img_size // 4), text_vocab_size = text_vocab_size, video_vocab_size = video_vocab_size + 2, drop_rate = 0.2);
+    self.SOS = video_vocab_size;
+    self.EOS = video_vocab_size + 1;
+    self.top_frame_token_num = img_size // 8 * img_size // 8;
+    self.bottom_frame_token_num = img_size // 4 * img_size // 4;
   def call(self, inputs):
-    # NOTE: top_tokens of the first frame is full of SOS tokens
-    # NOTE: bottom_tokens of the first frame is full of SOS tokens
+    # inputs.shape = (batch, length)
     top_tokens = tf.ones((tf.shape(inputs)[0], self.top_frame_token_num), dtype = tf.int64) * self.SOS; # top_tokens.shape = (batch, (origin_shape // 8) ** 2)
     bottom_tokens = tf.ones((tf.shape(inputs)[0], self.bottom_frame_token_num), dtype = tf.int64) * self.SOS; # bottom_tokens.shape = (batch, (origin_shape // 4) ** 2)
     for i in range(self.video_length + 1):
@@ -527,21 +518,6 @@ class GODIVA(tf.keras.Model):
       tokens = tf.math.argmax(bottom_pred, axis = -1); # tokens.shape = (batch, length)
       bottom_tokens = tf.concat([bottom_tokens, tokens[:,-self.bottom_frame_token_num:]], axis = 1); # bottom_tokens.shape = (batch, 1+length)
     return top_tokens, bottom_tokens;
-  def decode(self, top_tokens, bottom_tokens):
-    top_embed_mat = self.encoder.layers[4].get_embed();
-    bottom_embed_mat = self.encoder.layers[8].get_embed();
-    top_tokens = top_tokens[:,self.top_frame_token_num:-self.top_frame_token_num]; # strip start and end tokens
-    bottom_tokens = bottom_tokens[:,self.bottom_frame_token_num:-self.bottom_frame_token_num]; # strip start and end tokens
-    top_embeddings = tf.nn.embedding_lookup(tf.transpose(top_embed_mat), top_tokens); # top_embeddings.shape = (batch, length * size//8 * size//8, embed_dim)
-    bottom_embeddings = tf.nn.embedding_lookup(tf.transpose(bottom_embed_mat), bottom_tokens); # bottom_embedding.shape = (batch, length * size//4 * size//4, embed_dim)
-    top_embeddings = tf.reshape(top_embeddings, (tf.shape(top_embeddings)[0], self.video_length, self.origin_shape[0]//8, self.origin_shape[1]//8, tf.shape(top_embeddings)[-1])); # top_embeddings.shape = (batch, length, size//8, size//8, embed_dim)
-    bottom_embeddings = tf.reshape(bottom_embeddings, (tf.shape(bottom_embeddings)[0], self.video_length, self.origin_shape[0]//4, self.origin_shape[1]//4, tf.shape(bottom_embeddings)[-1])); # bottom_embeddings.shape = (batch, length, size//4, size//4, embed_dim)
-    video = list();
-    for i in range(self.video_length):
-      frame = self.decoder([top_embeddings[:, i, ...], bottom_embeddings[:, i, ...]]); # frame.shape = (batch, 64, 64, 3)
-      video.append(frame);
-    video = tf.stack(video, axis = 1); # video.shape = (batch, seq_length, 64, 64, 3)
-    return video;
 
 if __name__ == "__main__":
 
