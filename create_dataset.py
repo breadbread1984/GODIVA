@@ -22,7 +22,7 @@ def parse_function_generator(output_size=(256, 256)):
     image = tf.cast(image, dtype = tf.float32) / 255.; # totensor
     image = (image - tf.reshape([0.5,0.5,0.5], (1,1,-1))) / tf.reshape([0.5,0.5,0.5], (1,1,-1));
     label = tf.cast(feature['image/class/label'], dtype=tf.int32);
-    return image, {'output_1': image, 'output_2': label};
+    return image, {'decoder': image, 'add_8': label};
   return parse_function;
 
 def load_dataset(directory):
