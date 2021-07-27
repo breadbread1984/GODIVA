@@ -24,9 +24,9 @@ class SampleGenerator(object):
         yield sample, text;
     return gen;
   def get_trainset(self,):
-    return tf.data.Dataset.from_generator(self.sample_generator(True), (tf.float32, tf.int64), (tf.TensorShape([16,64,64,1]), tf.TensorShape([9,]))).repeat(-1);
+    return tf.data.Dataset.from_generator(self.sample_generator(True), (tf.float32, tf.int64), (tf.TensorShape([16,64,64,1]), tf.TensorShape([9,])));
   def get_testset(self):
-    return tf.data.Dataset.from_generator(self.sample_generator(False), (tf.float32, tf.int64), (tf.TensorShape([16,64,64,1]), tf.TensorShape([9,]))).repeat(-1);
+    return tf.data.Dataset.from_generator(self.sample_generator(False), (tf.float32, tf.int64), (tf.TensorShape([16,64,64,1]), tf.TensorShape([9,])));
 
 class parse_function(object):
   def __init__(self, img_size = 64, encoder = join('models', 'encoder.h5'), decoder = join('models', 'decoder.h5')):
