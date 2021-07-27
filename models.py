@@ -241,7 +241,7 @@ class SparseDropout(tf.keras.layers.Layer):
     config['drop_rate'] = self.embed_dim;
     return config;
 
-def FullAttention(key_dim, value_dim, num_heads, drop_rate = 0.2, causal = True):
+def FullAttention(key_dim, value_dim, num_heads, drop_rate = 0.2, causal = True, use_sparse_op = False):
   query = tf.keras.Input((num_heads, None, key_dim // num_heads)); # query = (batch, heads, query_length, key_dim // heads)
   key = tf.keras.Input((num_heads, None, key_dim // num_heads)); # key.shape = (batch, heads, key_length, key_dim // heads)
   value = tf.keras.Input((num_heads, None, value_dim // num_heads)); # value.shape = (batch, heads, key_length, value_dim // heads)
@@ -252,14 +252,17 @@ def FullAttention(key_dim, value_dim, num_heads, drop_rate = 0.2, causal = True)
     mask = tf.keras.layers.Lambda(lambda x: tf.tile(tf.reshape(x[0], (1,1,tf.shape(x[0])[0],tf.shape(x[0])[1])), (tf.shape(x[1])[0],1,1,1)))([mask, query]);
   else:
     mask = tf.keras.Input((1, None, None)); # mask.shape = (batch, 1, query_length, key_length)
-  qk = MaskedDenseMatMul()([query, key, mask]);
-  logits = tf.keras.layers.Lambda(lambda x, kd: x / tf.math.sqrt(tf.cast(kd, dtype = tf.float32)), arguments = {'kd': key_dim // num_heads})(qk); # logits.shape = (batch, heads, query_length, key_length)
-  logits = Dense2Sparse()([logits, mask]); # logits.shape = (batch, heads, query_length, key_length)
-  attention = tf.keras.layers.Lambda(lambda x: tf.sparse.softmax(x))(logits); # attention.shape = (batch, num_heads, query_length, key_length)
-  # FIXME: uncomment the following line
-  #attention = SparseDropout(drop_rate = drop_rate)(attention); # attention.shape = (batch, num_heads, query_length, key_length)
-  # 2) weighted sum of value elements for each query element
-  results = SparseDenseMatMul()([attention, value]); # results.shape = (batch, num_heads, query_length, value_dim // num_heads)
+  if use_sparse_op == True:
+    qk = MaskedDenseMatMul()([query, key, mask]);
+    logits = tf.keras.layers.Lambda(lambda x, kd: x / tf.math.sqrt(tf.cast(kd, dtype = tf.float32)), arguments = {'kd': key_dim // num_heads})(qk); # logits.shape = (batch, heads, query_length, key_length)
+    logits = Dense2Sparse()([logits, mask]); # logits.shape = (batch, heads, query_length, key_length)
+    attention = tf.keras.layers.Lambda(lambda x: tf.sparse.softmax(x))(logits); # attention.shape = (batch, num_heads, query_length, key_length)
+    results = SparseDenseMatMul()([attention, value]); # results.shape = (batch, num_heads, query_length, value_dim // num_heads)
+  else:
+    qk = tf.keras.layers.Lambda(lambda x: tf.linalg.matmul(x[0], x[1], transpose_b = True))([query, key]);
+    logits = tf.keras.layers.Lambda(lambda x, kd: x[0] / tf.math.sqrt(tf.cast(kd, dtype = tf.float32)) + (1 - x[1]) * -1e9, arguments = {'kd': key_dim // num_heads})([qk, mask]);
+    attention = tf.keras.layers.Softmax()(logits);
+    results = tf.keras.layers.Lambda(lambda x: tf.linalg.matmul(x[0], x[1]))([attention, value]);
   return tf.keras.Model(inputs = (query, key, value) if causal == True else (query, key, value, mask), outputs = results);
 
 def AxialAttention(key_dim, value_dim, num_heads, drop_rate = 0.5, origin_shape = None, axial_dim = 0):
