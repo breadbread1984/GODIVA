@@ -260,7 +260,7 @@ def FullAttention(key_dim, value_dim, num_heads, drop_rate = 0.2, causal = True,
     results = SparseDenseMatMul()([attention, value]); # results.shape = (batch, num_heads, query_length, value_dim // num_heads)
   else:
     qk = tf.keras.layers.Lambda(lambda x: tf.linalg.matmul(x[0], x[1], transpose_b = True))([query, key]);
-    logits = tf.keras.layers.Lambda(lambda x, kd: x[0] / tf.math.sqrt(tf.cast(kd, dtype = tf.float32)) + (1 - x[1]) * -1e9, arguments = {'kd': key_dim // num_heads})([qk, mask]);
+    logits = tf.keras.layers.Lambda(lambda x, kd: x[0] / tf.math.sqrt(tf.cast(kd, dtype = tf.float32)) + tf.cast(1 - x[1], dtype = tf.float32) * -1e9, arguments = {'kd': key_dim // num_heads})([qk, mask]);
     attention = tf.keras.layers.Softmax()(logits);
     results = tf.keras.layers.Lambda(lambda x: tf.linalg.matmul(x[0], x[1]))([attention, value]);
   return tf.keras.Model(inputs = (query, key, value) if causal == True else (query, key, value, mask), outputs = results);
