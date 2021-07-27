@@ -29,8 +29,8 @@ def main(unused_argv):
     godiva = GODIVA(text_vocab_size = text_vocab_size);
     optimizer = tf.keras.optimizers.Adam(tf.keras.optimizers.schedules.ExponentialDecay(3e-4, decay_steps = 20000, decay_rate = 0.97));
     godiva.compile(optimizer = optimizer,
-                   loss = [tf.keras.losses.SparseCategoricalCrossentropy(), tf.keras.losses.SparseCategoricalCrossentropy()],
-                   metrics = [tf.keras.metrics.SparseCategoricalAccuracy(), tf.keras.metrics.SparseCategoricalAccuracy()]);
+                   loss = [tf.keras.losses.SparseCategoricalCrossentropy(name = 'top_ce_loss'), tf.keras.losses.SparseCategoricalCrossentropy(name = 'bottom_ce_loss')],
+                   metrics = [tf.keras.metrics.SparseCategoricalAccuracy(name = 'top_acc'), tf.keras.metrics.SparseCategoricalAccuracy(name = 'bottom_acc')]);
   # generate dataset
   dataset_generator = SampleGenerator(filename);
   parse_func = parse_function();
