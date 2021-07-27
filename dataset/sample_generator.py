@@ -30,8 +30,8 @@ class SampleGenerator(object):
 
 class parse_function(object):
   def __init__(self, img_size = 64, encoder = join('models', 'encoder.h5'), decoder = join('models', 'decoder.h5')):
-    self.encoder = tf.keras.models.load_model(encoder, custom_objects = {'Quantize': Quantize, 'QuantizeEma': QuantizeEma});
-    self.decoder = tf.keras.models.load_model(decoder);
+    self.encoder = tf.keras.models.load_model(encoder, custom_objects = {'tf': tf, 'Quantize': Quantize, 'QuantizeEma': QuantizeEma});
+    self.decoder = tf.keras.models.load_model(decoder, custom_objects = {'tf': tf});
     top_quantize = self.encoder.layers[4];
     top_embed_tab = top_quantize.get_embed();
     top_vocab_size = tf.shape(top_embed_tab)[-1];
