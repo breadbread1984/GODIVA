@@ -530,6 +530,6 @@ if __name__ == "__main__":
 
   tokens = np.random.randint(low = 0, high = 10, size = (1, 34));
   godiva = GODIVA(text_vocab_size = 10);
-  top_tokens, bottom_tokens = godiva(tokens);
-  print(top_tokens.shape, bottom_tokens.shape);
+  top_preds, bottom_preds = godiva(tokens);
+  print(top_preds.shape, bottom_preds.shape);
   godiva.save_weights('godiva.h5');
