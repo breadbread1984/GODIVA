@@ -38,10 +38,10 @@ class parse_function(object):
     bottom_quantize = self.encoder.layers[8];
     bottom_embed_tab = bottom_quantize.get_embed();
     bottom_vocab_size = tf.shape(bottom_embed_tab)[-1];
-    self.top_SOS = top_vocab_size;
-    self.top_EOS = top_vocab_size + 1;
-    self.bottom_SOS = bottom_vocab_size;
-    self.bottom_EOS = bottom_vocab_size + 1;
+    self.top_SOS = tf.cast(top_vocab_size, dtype = tf.int64);
+    self.top_EOS = tf.cast(top_vocab_size + 1, dtype = tf.int64);
+    self.bottom_SOS = tf.cast(bottom_vocab_size, dtype = tf.int64);
+    self.bottom_EOS = tf.cast(bottom_vocab_size + 1, dtype = tf.int64);
     self.top_frame_token_num = img_size // 8 * img_size // 8;
     self.bottom_frame_token_num = img_size // 4 * img_size // 4;
   def parse_function(self, sample, text):
