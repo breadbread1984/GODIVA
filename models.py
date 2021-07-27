@@ -509,15 +509,19 @@ class GODIVA(tf.keras.Model):
     # inputs.shape = (batch, length)
     top_tokens = tf.ones((tf.shape(inputs)[0], self.top_frame_token_num), dtype = tf.int64) * self.SOS; # top_tokens.shape = (batch, (origin_shape // 8) ** 2)
     bottom_tokens = tf.ones((tf.shape(inputs)[0], self.bottom_frame_token_num), dtype = tf.int64) * self.SOS; # bottom_tokens.shape = (batch, (origin_shape // 4) ** 2)
+    top_preds = tf.ones((tf.shape(inputs)[0], 0, self.top_transformer.output[0].shape[-1]), dtype = tf.float32); # top_preds.shape = (batch, 0, video_vocab_size + 2)
+    bottom_preds = tf.ones((tf.shape(inputs)[0], 0, self.bottom_transformer.output[0].shape[-1]), dtype = tf.float32); # bottom_preds.shape = (batch, 0, video_vocab_size + 2)
     for i in range(self.video_length + 1):
-      top_pred = self.top_transformer([inputs, top_tokens]); # top_pred.shape = (batch, length, video_vocab_size)
+      top_pred = self.top_transformer([inputs, top_tokens]); # top_pred.shape = (batch, length, video_vocab_size + 2)
       tokens = tf.math.argmax(top_pred, axis = -1); # tokens.shape = (batch, length)
-      top_tokens = tf.concat([top_tokens, tokens[:,-self.top_frame_token_num:]], axis = 1); # top_tokens.shape = (batch, length)
+      top_tokens = tf.concat([top_tokens, tokens[:,-self.top_frame_token_num:]], axis = 1); # top_tokens.shape = (batch, length + top_frame_token_num)
+      top_preds = tf.concat([top_preds, top_pred[:,-self.top_frame_token_num:,:]], axis = 1); # top_preds.shape = (batch, length + top_frame_token_num, video_vocab_size + 2)
     for i in range(self.video_length + 1):
-      bottom_pred = self.bottom_transformer([inputs, bottom_tokens]);
+      bottom_pred = self.bottom_transformer([inputs, bottom_tokens]); # bottom_pred.shape = (batch, length, video_vocab_size + 2)
       tokens = tf.math.argmax(bottom_pred, axis = -1); # tokens.shape = (batch, length)
-      bottom_tokens = tf.concat([bottom_tokens, tokens[:,-self.bottom_frame_token_num:]], axis = 1); # bottom_tokens.shape = (batch, 1+length)
-    return top_tokens, bottom_tokens;
+      bottom_tokens = tf.concat([bottom_tokens, tokens[:,-self.bottom_frame_token_num:]], axis = 1); # bottom_tokens.shape = (batch, length + bottom_frame_token_num)
+      bottom_preds = tf.concat([bottom_preds, bottom_pred[:,-self.bottom_frame_token_num:,:]], axis = 1); # bottom_tokens.shape = (batch, length + bottom_frame_token_num, video_vocab_size + 2)
+    return top_preds, bottom_preds;
 
 if __name__ == "__main__":
 

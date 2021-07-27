@@ -54,9 +54,9 @@ class parse_function(object):
     _, tokens_t, _, _, tokens_b, _ = self.encoder(sample);
     tokens_t = tf.reshape(tokens_t, (-1,)); # video_token_t.shape = (length * h/8 * w/8)
     tokens_b = tf.reshape(tokens_b, (-1,)); # video_token_b.shape = (length * h/4 * w/4)
-    inputs_t = tf.concat([tf.ones((self.top_frame_token_num,), dtype = tf.int64) * self.top_SOS, tokens_t, tf.ones((self.top_frame_token_num,), dtype = tf.int64) * self.top_EOS], axis = 0); # inputs_t.shape = ((length + 2) * h/8 * w/8)
-    inputs_b = tf.concat([tf.ones((self.bottom_frame_token_num,), dtype = tf.int64) * self.bottom_SOS, tokens_b, tf.ones((self.bottom_frame_token_num,), dtype = tf.int64) * self.bottom_EOS], axis = 0); # inputs.b.shape = ((length + 2) * h/4 * w/4)
-    return text, (inputs_t, inputs_b);
+    outputs_t = tf.concat([tokens_t, tf.ones((self.top_frame_token_num,), dtype = tf.int64) * self.top_EOS], axis = 0); # inputs_t.shape = ((length + 2) * h/8 * w/8)
+    outputs_b = tf.concat([tokens_b, tf.ones((self.bottom_frame_token_num,), dtype = tf.int64) * self.bottom_EOS], axis = 0); # inputs.b.shape = ((length + 2) * h/4 * w/4)
+    return text, (outputs_t, outputs_b);
 
 if __name__ == "__main__":
 
