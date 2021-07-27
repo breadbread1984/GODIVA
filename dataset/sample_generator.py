@@ -52,10 +52,10 @@ class parse_function(object):
     sample = tf.tile(sample, (1,1,1,3)); # samples.shape = (lenght, h, w, 3)
     # tokens_t.shape = (length, h/8, h/8), tokens_b.shape = (length, h/4, w/4)
     _, tokens_t, _, _, tokens_b, _ = self.encoder(sample);
-    token_t = tf.reshape(token_t, (-1,)); # video_token_t.shape = (length * h/8 * w/8)
-    token_b = tf.reshape(token_b, (-1,)); # video_token_b.shape = (length * h/4 * w/4)
-    inputs_t = tf.concat([tf.ones((self.top_frame_token_num,), dtype = tf.int32) * self.top_SOS, token_t, tf.ones((self.top_frame_token_num,), dtype = tf.int32) * self.top_EOS], axis = 0); # inputs_t.shape = ((length + 2) * h/8 * w/8)
-    inputs_b = tf.concat([tf.ones((self.bottom_frame_token_num,), dtype = tf.int32) * self.bottom_SOS, token_b, tf.ones((self.bottom_frame_token_num,), dtype = tf.int32) * self.bottom_EOS], axis = 0); # inputs.b.shape = ((length + 2) * h/4 * w/4)
+    tokens_t = tf.reshape(tokens_t, (-1,)); # video_token_t.shape = (length * h/8 * w/8)
+    tokens_b = tf.reshape(tokens_b, (-1,)); # video_token_b.shape = (length * h/4 * w/4)
+    inputs_t = tf.concat([tf.ones((self.top_frame_token_num,), dtype = tf.int32) * self.top_SOS, tokens_t, tf.ones((self.top_frame_token_num,), dtype = tf.int32) * self.top_EOS], axis = 0); # inputs_t.shape = ((length + 2) * h/8 * w/8)
+    inputs_b = tf.concat([tf.ones((self.bottom_frame_token_num,), dtype = tf.int32) * self.bottom_SOS, tokens_b, tf.ones((self.bottom_frame_token_num,), dtype = tf.int32) * self.bottom_EOS], axis = 0); # inputs.b.shape = ((length + 2) * h/4 * w/4)
     return text, (inputs_t, inputs_b);
 
 if __name__ == "__main__":
