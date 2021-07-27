@@ -82,7 +82,7 @@ def save_model():
     trainer.layers[1].layers[8].set_trainable(False);
   if not exists('models'): mkdir('models');
   trainer.layers[1].save(join('models', 'encoder.h5'));
-  trainer.layers[1].save(join('models', 'decoder.h5'));
+  trainer.layers[2].save(join('models', 'decoder.h5'));
 
 def test():
   import cv2;
