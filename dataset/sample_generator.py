@@ -48,6 +48,8 @@ class parse_function(object):
     # sample.shape = (length, height, width, channel)
     # text.shape = (length)
     sample = sample / 255. - 0.5;
+    # tile to 3-channel images
+    sample = tf.tile(sample, (1,1,1,3)); # samples.shape = (lenght, h, w, 3)
     # tokens_t.shape = (length, h/8, h/8), tokens_b.shape = (length, h/4, w/4)
     _, tokens_t, _, _, tokens_b, _ = self.encoder(sample);
     token_t = tf.reshape(token_t, (-1,)); # video_token_t.shape = (length * h/8 * w/8)
