@@ -4,7 +4,7 @@ import h5py;
 from os.path import join;
 import numpy as np;
 import tensorflow as tf;
-from models import Quantize, QuantizeEma;
+from vqvae import Quantize, QuantizeEma;
 
 class SampleGenerator(object):  
   def __init__(self, filename):
