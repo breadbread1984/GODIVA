@@ -424,9 +424,10 @@ def PositionalEncoding(d_model):
 def EncoderLayer(hidden_dim = 1024, num_heads = 16, **kwargs):
   # NOTE: this sparse transformer residual block is for decoder only transformer
   inputs = tf.keras.Input((None, hidden_dim,)); # inputs.shape = (batch, hidden_length, hidden_dim)
+  mask = tf.keras.Input((1, None, None)); # mask.shape = (batch, 1, query_length, key_length)
   short = inputs;
   results = tf.keras.layers.LayerNormalization()(inputs); # results.shape = (batch, hidden_length, hidden_dim)
-  results = MultiHeadAttention(hidden_dim, hidden_dim, num_heads, attn_type = 'full', **kwargs)([results, results, results]); # results.shape = (batch, hidden_length, hidden_dim)
+  results = MultiHeadAttention(hidden_dim, hidden_dim, num_heads, attn_type = 'full', **kwargs)([results, results, results, mask]); # results.shape = (batch, hidden_length, hidden_dim)
   results = tf.keras.layers.Dropout(kwargs['drop_rate'])(results); # results.shape = (batch, hidden_length, hidden_dim)
   results = tf.keras.layers.Add()([results, short]); # results.shape = (batch, hidden_length, hidden_dim)
   short = results;
@@ -436,19 +437,21 @@ def EncoderLayer(hidden_dim = 1024, num_heads = 16, **kwargs):
   results = tf.keras.layers.Dense(hidden_dim)(results);  # results.shape = (batch, hidden_length, hidden_dim)
   results = tf.keras.layers.Dropout(kwargs['drop_rate'])(results); # results.shape = (batch, hidden_length, hidden_dim)
   results = tf.keras.layers.Add()([results, short]); # results.shape = (batch, hidden_length, hidden_dim)
-  return tf.keras.Model(inputs = inputs, outputs = results);
+  return tf.keras.Model(inputs = (inputs, mask), outputs = results);
 
 def TransEncoder(num_layers = 2, hidden_dim = 1024, num_heads = 16, **kwargs):
   inputs = tf.keras.Input((None, hidden_dim));
+  mask = tf.keras.Input((1, None, None)); # mask.shape = (batch, 1, query_length, key_length)
   embeddings = PositionalEncoding(hidden_dim)(inputs);
   outputs = tf.keras.layers.Dropout(rate = kwargs['drop_rate'])(embeddings);
   for i in range(num_layers):
-    outputs = EncoderLayer(hidden_dim, num_heads, drop_rate = kwargs['drop_rate'], causal = True)(outputs);
-  return tf.keras.Model(inputs = inputs, outputs = outputs);
+    outputs = EncoderLayer(hidden_dim, num_heads, drop_rate = kwargs['drop_rate'], causal = False)([outputs, mask]);
+  return tf.keras.Model(inputs = (inputs, mask), outputs = outputs);
 
 def DecoderLayer(hidden_dim = 1024, num_heads = 16, **kwargs):
-  inputs = tf.keras.Input((None, hidden_dim,));
-  code = tf.keras.Input((None, hidden_dim));
+  inputs = tf.keras.Input((None, hidden_dim,)); # inputs.shape = (batch, video_length, hidden_dim)
+  code = tf.keras.Input((None, hidden_dim)); # code.shape = (batch, text_length, hidden_dim)
+  mask = tf.keras.Input((1, None, None)); # mask.shape = (batch, 1, video_length, text_length)
   short = inputs;
   results = tf.keras.layers.LayerNormalization()(inputs);
   for i in range(4):
@@ -457,7 +460,6 @@ def DecoderLayer(hidden_dim = 1024, num_heads = 16, **kwargs):
     results = MultiHeadAttention(hidden_dim, hidden_dim, num_heads, attn_type = 'axial', drop_rate = kwargs['drop_rate'], origin_shape = kwargs['origin_shape'], axial_dim = -1)([results, results, results]);
   results = tf.keras.layers.Dropout(kwargs['drop_rate'])(results);
   results = tf.keras.layers.Add()([results, short]);
-  mask = tf.keras.layers.Lambda(lambda x: tf.ones((tf.shape(x[0])[0],1,tf.shape(x[0])[1], tf.shape(x[1])[1])))([inputs, code]);
   short = results;
   results = tf.keras.layers.LayerNormalization()(results);
   results = MultiHeadAttention(hidden_dim, hidden_dim, num_heads, 'full', drop_rate = kwargs['drop_rate'], causal = False)([results, code, code, mask]);
@@ -470,19 +472,21 @@ def DecoderLayer(hidden_dim = 1024, num_heads = 16, **kwargs):
   results = tf.keras.layers.Dense(hidden_dim)(results);
   results = tf.keras.layers.Dropout(kwargs['drop_rate'])(results);
   results = tf.keras.layers.Add()([results, short]);
-  return tf.keras.Model(inputs = (inputs, code), outputs = results);
+  return tf.keras.Model(inputs = (inputs, code, mask), outputs = results);
 
 def TransDecoder(num_layers = 2, hidden_dim = 1024, num_heads = 16, **kwargs):
-  inputs = tf.keras.Input((None, hidden_dim));
-  code = tf.keras.Input((None, hidden_dim));
+  inputs = tf.keras.Input((None, hidden_dim)); # inputs.shape = (batch, video_length, hidden_dim)
+  code = tf.keras.Input((None, hidden_dim)); # code.shape = (batch, text_length, hidden_dim)
+  mask = tf.keras.Input((1, None, None)); # mask.shape = (batch, 1, video_length, text_length)
   embeddings = PositionalEncoding(hidden_dim)(inputs);
   outputs = tf.keras.layers.Dropout(rate = kwargs['drop_rate'])(embeddings);
   for i in range(num_layers):
-    outputs = DecoderLayer(hidden_dim, num_heads, drop_rate = kwargs['drop_rate'], origin_shape = kwargs['origin_shape'])([outputs, code]);
-  return tf.keras.Model(inputs = (inputs, code), outputs = outputs);
+    outputs = DecoderLayer(hidden_dim, num_heads, drop_rate = kwargs['drop_rate'], origin_shape = kwargs['origin_shape'])([outputs, code, mask]);
+  return tf.keras.Model(inputs = (inputs, code, mask), outputs = outputs);
 
 def Transformer(encoder_layers = 2, decoder_layers = 2, hidden_dim = 128, num_heads = 16, origin_shape = (64, 64), text_vocab_size = None, video_vocab_size = 10000, **kwargs):
   text_inputs = tf.keras.Input((None,)); # inputs.shape = (batch, text_length)
+  mask = tf.keras.Input((1, None, None)); # mask.shape = (batch, 1, query_length, text_length)
   # INFO: to avoid repeat calculating embedding of leading frames, the input uses code from VQVAE, but leading frames
   # NOTE: video_top_inputs.shape[1] = origin_shape[1] // 8 * origin_shape[2] // 8 * frame_number
   # NOTE: video_bottom_inputs.shape[1] = origin_shape[1] // 4 * origin_shape[2] // 4 * frame_number
@@ -493,34 +497,36 @@ def Transformer(encoder_layers = 2, decoder_layers = 2, hidden_dim = 128, num_he
   video_embed = tf.keras.layers.Embedding(video_vocab_size, hidden_dim)(video_inputs);
   video_embed = tf.keras.layers.Lambda(lambda x, d: tf.math.sqrt(tf.cast(d, dtype = tf.float32)) * x, arguments = {'d': hidden_dim})(video_embed);
   
-  text_code = TransEncoder(encoder_layers, hidden_dim, num_heads, drop_rate = kwargs['drop_rate'])(text_embed); # text_code.shape = (batch, text_length, hidden_dim)
-  video_code = TransDecoder(decoder_layers, hidden_dim, num_heads, drop_rate = kwargs['drop_rate'], origin_shape = (origin_shape[0], origin_shape[1]))([video_embed, text_code]);
+  text_code = TransEncoder(encoder_layers, hidden_dim, num_heads, drop_rate = kwargs['drop_rate'])([text_embed, mask]); # text_code.shape = (batch, text_length, hidden_dim)
+  video_code = TransDecoder(decoder_layers, hidden_dim, num_heads, drop_rate = kwargs['drop_rate'], origin_shape = (origin_shape[0], origin_shape[1]))([video_embed, text_code, mask]);
   video_pred = tf.keras.layers.Dense(units = video_vocab_size, activation = tf.keras.activations.softmax)(video_code);
-  return tf.keras.Model(inputs = (text_inputs, video_inputs), outputs = video_pred);
+  return tf.keras.Model(inputs = (text_inputs, mask, video_inputs), outputs = video_pred);
 
 class GODIVA(tf.keras.Model):
   def __init__(self, img_size = 64, video_length = 16, text_vocab_size = None, video_vocab_size = 10000, **kwargs):
     super(GODIVA, self).__init__(**kwargs);
     self.video_length = video_length;
-    self.top_transformer = Transformer(origin_shape = (img_size // 8, img_size // 8), text_vocab_size = text_vocab_size, video_vocab_size = video_vocab_size + 2, drop_rate = 0.2);
-    self.bottom_transformer = Transformer(origin_shape = (img_size // 4, img_size // 4), text_vocab_size = text_vocab_size, video_vocab_size = video_vocab_size + 2, drop_rate = 0.2);
-    self.SOS = video_vocab_size;
-    self.EOS = video_vocab_size + 1;
+    self.top_transformer = Transformer(origin_shape = (img_size // 8, img_size // 8), text_vocab_size = text_vocab_size + 2, video_vocab_size = video_vocab_size + 2, drop_rate = 0.2);
+    self.bottom_transformer = Transformer(origin_shape = (img_size // 4, img_size // 4), text_vocab_size = text_vocab_size + 2, video_vocab_size = video_vocab_size + 2, drop_rate = 0.2);
+    self.VIDEO_SOS = video_vocab_size;
+    self.VIDEO_EOS = video_vocab_size + 1;
     self.top_frame_token_num = img_size // 8 * img_size // 8;
     self.bottom_frame_token_num = img_size // 4 * img_size // 4;
   def call(self, inputs):
     # inputs.shape = (batch, length)
-    top_tokens = tf.ones((tf.shape(inputs)[0], self.top_frame_token_num), dtype = tf.int64) * self.SOS; # top_tokens.shape = (batch, (origin_shape // 8) ** 2)
-    bottom_tokens = tf.ones((tf.shape(inputs)[0], self.bottom_frame_token_num), dtype = tf.int64) * self.SOS; # bottom_tokens.shape = (batch, (origin_shape // 4) ** 2)
-    top_preds = tf.ones((tf.shape(inputs)[0], 0, self.top_transformer.output[0].shape[-1]), dtype = tf.float32); # top_preds.shape = (batch, 0, video_vocab_size + 2)
-    bottom_preds = tf.ones((tf.shape(inputs)[0], 0, self.bottom_transformer.output[0].shape[-1]), dtype = tf.float32); # bottom_preds.shape = (batch, 0, video_vocab_size + 2)
+    text = inputs[0];
+    mask = inputs[1];
+    top_tokens = tf.ones((tf.shape(text)[0], self.top_frame_token_num), dtype = tf.int64) * self.VIDEO_SOS; # top_tokens.shape = (batch, (origin_shape // 8) ** 2)
+    bottom_tokens = tf.ones((tf.shape(text)[0], self.bottom_frame_token_num), dtype = tf.int64) * self.VIDEO_SOS; # bottom_tokens.shape = (batch, (origin_shape // 4) ** 2)
+    top_preds = tf.ones((tf.shape(text)[0], 0, self.top_transformer.output[0].shape[-1]), dtype = tf.float32); # top_preds.shape = (batch, 0, video_vocab_size + 2)
+    bottom_preds = tf.ones((tf.shape(text)[0], 0, self.bottom_transformer.output[0].shape[-1]), dtype = tf.float32); # bottom_preds.shape = (batch, 0, video_vocab_size + 2)
     for i in range(self.video_length + 1):
-      top_pred = self.top_transformer([inputs, top_tokens]); # top_pred.shape = (batch, length, video_vocab_size + 2)
+      top_pred = self.top_transformer([text, mask, top_tokens]); # top_pred.shape = (batch, length, video_vocab_size + 2)
       tokens = tf.math.argmax(top_pred, axis = -1); # tokens.shape = (batch, length)
       top_tokens = tf.concat([top_tokens, tokens[:,-self.top_frame_token_num:]], axis = 1); # top_tokens.shape = (batch, length + top_frame_token_num)
       top_preds = tf.concat([top_preds, top_pred[:,-self.top_frame_token_num:,:]], axis = 1); # top_preds.shape = (batch, length + top_frame_token_num, video_vocab_size + 2)
     for i in range(self.video_length + 1):
-      bottom_pred = self.bottom_transformer([inputs, bottom_tokens]); # bottom_pred.shape = (batch, length, video_vocab_size + 2)
+      bottom_pred = self.bottom_transformer([text, mask, bottom_tokens]); # bottom_pred.shape = (batch, length, video_vocab_size + 2)
       tokens = tf.math.argmax(bottom_pred, axis = -1); # tokens.shape = (batch, length)
       bottom_tokens = tf.concat([bottom_tokens, tokens[:,-self.bottom_frame_token_num:]], axis = 1); # bottom_tokens.shape = (batch, length + bottom_frame_token_num)
       bottom_preds = tf.concat([bottom_preds, bottom_pred[:,-self.bottom_frame_token_num:,:]], axis = 1); # bottom_tokens.shape = (batch, length + bottom_frame_token_num, video_vocab_size + 2)
@@ -529,7 +535,8 @@ class GODIVA(tf.keras.Model):
 if __name__ == "__main__":
 
   tokens = np.random.randint(low = 0, high = 10, size = (1, 34));
+  mask = np.random.randint(low = 0, high = 2, size = (1, 1, 1, 34));
   godiva = GODIVA(text_vocab_size = 10);
-  top_preds, bottom_preds = godiva(tokens);
+  top_preds, bottom_preds = godiva([tokens, mask]);
   print(top_preds.shape, bottom_preds.shape);
   godiva.save_weights('godiva.h5');

@@ -29,7 +29,8 @@ class SampleGenerator(object):
     return tf.data.Dataset.from_generator(self.sample_generator(False), (tf.float32, tf.int64), (tf.TensorShape([16,64,64,1]), tf.TensorShape([9,])));
 
 class parse_function(object):
-  def __init__(self, img_size = 64, encoder = join('models', 'encoder.h5'), decoder = join('models', 'decoder.h5')):
+  def __init__(self, dataset = 'single', img_size = 64, encoder = join('models', 'encoder.h5'), decoder = join('models', 'decoder.h5')):
+    assert dataset in ['single', 'double'];
     self.encoder = tf.keras.models.load_model(encoder, custom_objects = {'tf': tf, 'Quantize': Quantize, 'QuantizeEma': QuantizeEma});
     self.decoder = tf.keras.models.load_model(decoder, custom_objects = {'tf': tf});
     top_quantize = self.encoder.layers[4];
@@ -38,6 +39,14 @@ class parse_function(object):
     bottom_quantize = self.encoder.layers[8];
     bottom_embed_tab = bottom_quantize.get_embed();
     bottom_vocab_size = tf.shape(bottom_embed_tab)[-1];
+    if dataset == 'single':
+      from dataset.mnist_caption_single import dictionary;
+      text_vocab_size = len(dictionary);
+    elif dataset == 'double':
+      from dataset.mnist_caption_two_digit import dictionary;
+      text_vocab_size = len(dictionary);
+    self.TEXT_SOS = tf.cast(text_vocab_size, dtype = tf.int64);
+    self.TEXT_EOS = tf.cast(text_vocab_size + 1, dtype = tf.int64);
     self.top_SOS = tf.cast(top_vocab_size, dtype = tf.int64);
     self.top_EOS = tf.cast(top_vocab_size + 1, dtype = tf.int64);
     self.bottom_SOS = tf.cast(bottom_vocab_size, dtype = tf.int64);
@@ -47,6 +56,9 @@ class parse_function(object):
   def parse_function(self, sample, text):
     # sample.shape = (length, height, width, channel)
     # text.shape = (length)
+    # 1) text preprocess
+    text = tf.concat([self.TEXT_SOS, text, self.TEXT_EOS], axis = 0); # text.shape = (length + 2)
+    # 2) video preprocess
     sample = sample / 255. - 0.5;
     # tile to 3-channel images
     sample = tf.tile(sample, (1,1,1,3)); # samples.shape = (lenght, h, w, 3)
