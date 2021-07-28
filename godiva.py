@@ -280,8 +280,8 @@ class GODIVA(tf.keras.Model):
     self.bottom_frame_token_num = img_size // 4 * img_size // 4;
   def call(self, inputs):
     # inputs.shape = (batch, length)
-    text = inputs[0];
-    mask = inputs[1];
+    text = inputs[0]; # text.shape = (batch, text_length)
+    mask = inputs[1]; # mask.shape = (batch, 1, 1, text_length)
     top_tokens = tf.ones((tf.shape(text)[0], self.top_frame_token_num), dtype = tf.int64) * self.VIDEO_SOS; # top_tokens.shape = (batch, (origin_shape // 8) ** 2)
     bottom_tokens = tf.ones((tf.shape(text)[0], self.bottom_frame_token_num), dtype = tf.int64) * self.VIDEO_SOS; # bottom_tokens.shape = (batch, (origin_shape // 4) ** 2)
     top_preds = tf.ones((tf.shape(text)[0], 0, self.top_transformer.output[0].shape[-1]), dtype = tf.float32); # top_preds.shape = (batch, 0, video_vocab_size + 2)
