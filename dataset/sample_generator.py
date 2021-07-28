@@ -57,7 +57,7 @@ class parse_function(object):
     # sample.shape = (length, height, width, channel)
     # text.shape = (length)
     # 1) text preprocess
-    text = tf.concat([[self.TEXT_SOS], text, [self.TEXT_EOS]], axis = 0); # text.shape = (length + 2)
+    padded_text = tf.concat([[self.TEXT_SOS], text, [self.TEXT_EOS]], axis = 0); # text.shape = (length + 2)
     mask = tf.concat([tf.cast([0,], dtype = tf.int64), tf.ones_like(text), tf.cast([0,], dtype = tf.int64)], axis = 0); # mask.shape (length + 2)
     mask = tf.reshape(mask, (1,1,-1)); # mask.shape = (1, 1, length + 2)
     # 2) video preprocess
@@ -70,7 +70,7 @@ class parse_function(object):
     tokens_b = tf.reshape(tokens_b, (-1,)); # video_token_b.shape = (length * h/4 * w/4)
     outputs_t = tf.concat([tokens_t, tf.ones((self.top_frame_token_num,), dtype = tf.int64) * self.top_EOS], axis = 0); # inputs_t.shape = ((length + 2) * h/8 * w/8)
     outputs_b = tf.concat([tokens_b, tf.ones((self.bottom_frame_token_num,), dtype = tf.int64) * self.bottom_EOS], axis = 0); # inputs.b.shape = ((length + 2) * h/4 * w/4)
-    return (text, mask), (outputs_t, outputs_b);
+    return (padded_text, mask), (outputs_t, outputs_b);
 
 if __name__ == "__main__":
 
