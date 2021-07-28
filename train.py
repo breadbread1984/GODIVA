@@ -4,7 +4,8 @@ from os import mkdir;
 from os.path import exists;
 from absl import app, flags;
 import tensorflow as tf;
-from models import GODIVA, Quantize, QuantizeEma;
+from godiva import GODIVA;
+from vqvae import Quantize, QuantizeEma;
 from dataset.sample_generator import SampleGenerator, parse_function;
 
 FLAGS = flags.FLAGS;

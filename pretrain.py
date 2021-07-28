@@ -4,7 +4,7 @@ from os import mkdir;
 from os.path import exists, join;
 from absl import flags, app;
 import tensorflow as tf;
-from models import VQVAE_Trainer, Quantize, QuantizeEma;
+from vavae import VQVAE_Trainer, Quantize, QuantizeEma;
 from create_dataset import parse_function_generator, load_dataset;
 
 FLAGS = flags.FLAGS;
