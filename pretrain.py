@@ -61,7 +61,7 @@ def pretrain():
   else:
     trainer = VQVAE_Trainer(n_embed = FLAGS.token_num, quantize_type = FLAGS.type);
     optimizer = tf.keras.optimizers.Adam(3e-4);
-    trainer.compile(optimizer = optimizer, loss = {'decoder': recon_loss, 'add_8': quant_loss}, loss_weights = {'decoder': 1,'add_8': 1});
+    trainer.compile(optimizer = optimizer, loss = {'decoder': recon_loss, 'encoder:1': quant_loss}, loss_weights = {'decoder': 1,'encoder:1': 1});
 
   # load imagenet dataset
   trainset = load_dataset(FLAGS.train_dir).map(parse_function_generator(output_size=(FLAGS.img_size, FLAGS.img_size))).shuffle(FLAGS.batch_size).batch(FLAGS.batch_size).prefetch(tf.data.experimental.AUTOTUNE);

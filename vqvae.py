@@ -139,8 +139,8 @@ def VQVAE_Decoder(in_channels = 3, hidden_channels = 128, res_layer = 4, res_cha
 
 def VQVAE_Trainer(in_channels = 3, hidden_channels = 128, res_layer = 2, res_channels = 32, embed_dim = 128, n_embed = 10000, quantize_type = 'original'):
   inputs = tf.keras.Input((None, None, in_channels));
-  quantized, loss = VQVAE_Encoder(in_channels, hidden_channels, res_layer, res_channels, embed_dim, n_embed, quantize_type)(inputs);
-  recon = VQVAE_Decoder(in_channels, hidden_channels, res_layer, res_channels, embed_dim)(quantized);
+  quantized, loss = VQVAE_Encoder(in_channels, hidden_channels, res_layer, res_channels, embed_dim, n_embed, quantize_type, name = 'encoder')(inputs);
+  recon = VQVAE_Decoder(in_channels, hidden_channels, res_layer, res_channels, embed_dim, name = 'decoder')(quantized);
   return tf.keras.Model(inputs = inputs, outputs = (recon, loss));
 
 if __name__ == "__main__":
