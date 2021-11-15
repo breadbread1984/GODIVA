@@ -272,37 +272,29 @@ class GODIVA(tf.keras.Model):
   def __init__(self, img_size = 64, video_length = 16, text_vocab_size = None, video_vocab_size = 10000, **kwargs):
     super(GODIVA, self).__init__(**kwargs);
     self.video_length = video_length;
-    self.top_transformer = Transformer(origin_shape = (img_size // 8, img_size // 8), text_vocab_size = text_vocab_size + 2, video_vocab_size = video_vocab_size + 2, drop_rate = 0.2);
-    self.bottom_transformer = Transformer(origin_shape = (img_size // 4, img_size // 4), text_vocab_size = text_vocab_size + 2, video_vocab_size = video_vocab_size + 2, drop_rate = 0.2);
+    self.transformer = Transformer(origin_shape = (img_size // 4, img_size // 4), text_vocab_size = text_vocab_size + 2, video_vocab_size = video_vocab_size + 2, drop_rate = 0.2);
     self.VIDEO_SOS = video_vocab_size;
     self.VIDEO_EOS = video_vocab_size + 1;
-    self.top_frame_token_num = img_size // 8 * img_size // 8;
-    self.bottom_frame_token_num = img_size // 4 * img_size // 4;
+    self.frame_token_num = img_size // 4 * img_size // 4;
   def call(self, inputs):
     # inputs.shape = (batch, length)
     text = inputs[0]; # text.shape = (batch, text_length)
     mask = inputs[1]; # mask.shape = (batch, 1, 1, text_length)
-    top_tokens = tf.ones((tf.shape(text)[0], self.top_frame_token_num), dtype = tf.int64) * self.VIDEO_SOS; # top_tokens.shape = (batch, (origin_shape // 8) ** 2)
-    bottom_tokens = tf.ones((tf.shape(text)[0], self.bottom_frame_token_num), dtype = tf.int64) * self.VIDEO_SOS; # bottom_tokens.shape = (batch, (origin_shape // 4) ** 2)
-    top_preds = tf.ones((tf.shape(text)[0], 0, self.top_transformer.output[0].shape[-1]), dtype = tf.float32); # top_preds.shape = (batch, 0, video_vocab_size + 2)
-    bottom_preds = tf.ones((tf.shape(text)[0], 0, self.bottom_transformer.output[0].shape[-1]), dtype = tf.float32); # bottom_preds.shape = (batch, 0, video_vocab_size + 2)
+    total_tokens = tf.ones((tf.shape(text)[0], self.frame_token_num), dtype = tf.int64) * self.VIDEO_SOS; # tokens.shape = (batch, (origin_shape // 4) ** 2)
+    total_preds = tf.ones((tf.shape(text)[0], 0, self.transformer.output[0].shape[-1]), dtype = tf.float32); # preds.shape = (batch, 0, video_vocab_size + 2)
     for i in range(self.video_length + 1):
-      top_pred = self.top_transformer([text, mask, top_tokens]); # top_pred.shape = (batch, length, video_vocab_size + 2)
-      tokens = tf.math.argmax(top_pred, axis = -1); # tokens.shape = (batch, length)
-      top_tokens = tf.concat([top_tokens, tokens[:,-self.top_frame_token_num:]], axis = 1); # top_tokens.shape = (batch, length + top_frame_token_num)
-      top_preds = tf.concat([top_preds, top_pred[:,-self.top_frame_token_num:,:]], axis = 1); # top_preds.shape = (batch, length + top_frame_token_num, video_vocab_size + 2)
-    for i in range(self.video_length + 1):
-      bottom_pred = self.bottom_transformer([text, mask, bottom_tokens]); # bottom_pred.shape = (batch, length, video_vocab_size + 2)
-      tokens = tf.math.argmax(bottom_pred, axis = -1); # tokens.shape = (batch, length)
-      bottom_tokens = tf.concat([bottom_tokens, tokens[:,-self.bottom_frame_token_num:]], axis = 1); # bottom_tokens.shape = (batch, length + bottom_frame_token_num)
-      bottom_preds = tf.concat([bottom_preds, bottom_pred[:,-self.bottom_frame_token_num:,:]], axis = 1); # bottom_tokens.shape = (batch, length + bottom_frame_token_num, video_vocab_size + 2)
-    return top_preds, bottom_preds;
+      pred = self.transformer([text, mask, total_tokens]); # bottom_pred.shape = (batch, length, video_vocab_size + 2)
+      tokens = tf.math.argmax(pred, axis = -1); # tokens.shape = (batch, length)
+      total_tokens = tf.concat([total_tokens, tokens[:,-self.frame_token_num:]], axis = 1); # bottom_tokens.shape = (batch, length + bottom_frame_token_num)
+      total_preds = tf.concat([total_preds, pred[:,-self.frame_token_num:,:]], axis = 1); # bottom_tokens.shape = (batch, length + bottom_frame_token_num, video_vocab_size + 2)
+    # NOTE: total_preds.shape = (batch, (video_length + 1) * frame_token_num, video_vocab_size + 2)
+    return total_preds;
 
 if __name__ == "__main__":
 
   tokens = np.random.randint(low = 0, high = 10, size = (1, 34));
   mask = np.random.randint(low = 0, high = 2, size = (1, 1, 1, 34));
   godiva = GODIVA(text_vocab_size = 10);
-  top_preds, bottom_preds = godiva([tokens, mask]);
-  print(top_preds.shape, bottom_preds.shape);
+  preds = godiva([tokens, mask]);
+  print(preds.shape);
   godiva.save_weights('godiva.h5');
