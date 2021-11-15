@@ -32,8 +32,6 @@ class SummaryCallback(tf.keras.callbacks.Callback):
     self.recon_loss = tf.keras.metrics.Mean(name = 'recon_loss', dtype = tf.float32);
     self.quant_loss = tf.keras.metrics.Mean(name = 'quant_loss', dtype = tf.float32);
     self.log = tf.summary.create_file_writer('./checkpoints');
-  def on_batch_begin(self, batch, logs = None):
-    pass;
   def on_batch_end(self, batch, logs = None):
     image, label_dict = next(self.iter);
     recon, diff = self.trainer(image); # recon.shape = (batch, 256, 256, 3)
@@ -49,10 +47,6 @@ class SummaryCallback(tf.keras.callbacks.Callback):
         tf.summary.image('reconstructed image', recon, step = self.trainer.optimizer.iterations);
       self.recon_loss.reset_states();
       self.quant_loss.reset_states();
-  def on_epoch_begin(self, epoch, logs = None):
-    pass;
-  def on_epoch_end(self, batch, logs = None):
-    pass;
 
 def pretrain():
   if exists('./checkpoints/ckpt'):
