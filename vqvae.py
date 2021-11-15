@@ -24,7 +24,7 @@ class Quantize(tf.keras.layers.Layer):
     e_loss = tf.math.reduce_mean((tf.stop_gradient(quantize) - inputs) ** 2);
     loss = q_loss + 0.25 * e_loss;
     outputs = inputs + tf.stop_gradient(quantize - inputs);
-    return outputs, loss;
+    return outputs, cluster_index, loss;
   def get_config(self):
     config = super(Quantize, self).get_config();
     config['embed_dim'] = self.embed_dim;
@@ -71,7 +71,7 @@ class QuantizeEma(tf.keras.layers.Layer):
     quantize = tf.nn.embedding_lookup(tf.transpose(self.cluster_mean), cluster_index); # quantize.shape = (batch, h, w, dim)
     e_loss = tf.math.reduce_mean((inputs - tf.stop_gradient(quantize)) ** 2); # diff.shape = (n_sample,)
     outputs = inputs + tf.stop_gradient(quantize - inputs);
-    return outputs, 0.25 * e_loss;
+    return outputs, cluster_index, 0.25 * e_loss;
   def set_trainable(self, enable_train = True):
     self.enable_train = enable_train;
   def get_config(self):
@@ -126,10 +126,10 @@ def VQVAE_Encoder(in_channels = 3, hidden_channels = 128, res_layer = 4, res_cha
   results = Encoder(in_channels, hidden_channels, 4, res_layer, res_channels, name = 'bottom_encoder')(inputs); # results.shape = (batch, h/4, w/4, hidden_channels)
   results = tf.keras.layers.Conv2D(embed_dim, (1,1))(results); # results.shape = (batch, h/4, w/4, embed_dim)
   if quantize_type == 'original':
-    quantized, loss = Quantize(embed_dim, n_embed, name = 'top_quantize')(results); # quantized_t.shape = (batch, h/8, w/8, embed_dim)
+    quantized, token, loss = Quantize(embed_dim, n_embed, name = 'top_quantize')(results); # quantized_t.shape = (batch, h/8, w/8, embed_dim)
   else:
-    quantized, loss = QuantizeEma(embed_dim, n_embed, name = 'top_quantize')(results); # quantized_t.shape = (batch, h/8, w/8, embed_dim)
-  return tf.keras.Model(inputs = inputs, outputs = (quantized, loss), **kwargs);
+    quantized, token, loss = QuantizeEma(embed_dim, n_embed, name = 'top_quantize')(results); # quantized_t.shape = (batch, h/8, w/8, embed_dim)
+  return tf.keras.Model(inputs = inputs, outputs = (quantized, token, loss), **kwargs);
 
 def VQVAE_Decoder(in_channels = 3, hidden_channels = 128, res_layer = 4, res_channels = 32, embed_dim = 64, **kwargs):
   quantized = tf.keras.Input((None, None, embed_dim)); # quantized_t.shape = (batch, h/4, w/4, embed_dim)
@@ -139,7 +139,7 @@ def VQVAE_Decoder(in_channels = 3, hidden_channels = 128, res_layer = 4, res_cha
 
 def VQVAE_Trainer(in_channels = 3, hidden_channels = 128, res_layer = 2, res_channels = 32, embed_dim = 128, n_embed = 10000, quantize_type = 'original'):
   inputs = tf.keras.Input((None, None, in_channels));
-  quantized, loss = VQVAE_Encoder(in_channels, hidden_channels, res_layer, res_channels, embed_dim, n_embed, quantize_type, name = 'encoder')(inputs);
+  quantized, token, loss = VQVAE_Encoder(in_channels, hidden_channels, res_layer, res_channels, embed_dim, n_embed, quantize_type, name = 'encoder')(inputs);
   recon = VQVAE_Decoder(in_channels, hidden_channels, res_layer, res_channels, embed_dim, name = 'decoder')(quantized);
   return tf.keras.Model(inputs = inputs, outputs = (recon, loss));
 
@@ -152,5 +152,5 @@ if __name__ == "__main__":
   print(recon.shape, loss.shape);
   encoder = VQVAE_Encoder();
   encoder.save('encoder.h5');
-  quantized, loss = encoder(inputs);
-  print(quantized.shape, loss.shape);
+  quantized, token, loss = encoder(inputs);
+  print(quantized.shape, token.shape, loss.shape);
