@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 
 from os import mkdir;
-from os.path import exists;
+from os.path import exists, join;
 from absl import app, flags;
 import tensorflow as tf;
 from godiva import GODIVA;
@@ -11,6 +11,40 @@ from dataset.sample_generator import SampleGenerator, parse_function;
 FLAGS = flags.FLAGS;
 flags.DEFINE_integer('batch_size', default = 4, help = 'batch size');
 flags.DEFINE_enum('dataset', default = 'single', enum_values = ['single', 'double'], help = 'which dataset to train on');
+
+class SummaryCallback(tf.keras.callbacks.Callback):
+  def __init__(self, godiva, eval_freq = 100):
+    self.godiva = godiva;
+    self.decoder = tf.keras.models.load_model(join('models', 'decoder.h5'));
+    encoder = tf.keras.models.load_model(join('models', 'encoder.h5'), custom_objects = {'tf': tf, 'Quantize': Quantize, 'QuantizeEma': QuantizeEma});
+    self.embed_tab = tf.transpose(encoder.get_layer('top_quantize').get_embed()); # embed_tab.shape = (n_embed, embed_dim)
+    self.eval_freq = eval_freq;
+    testset = dataset_generator.get_testset().map(parse_func.parse_function).batch(1);
+    self.iter = iter(testset);
+    self.log = tf.summary.create_file_writer('checkpoints');
+  def on_batch_end(self, batch, logs = None):
+    if batch % self.eval_freq == 0:
+      (padded_text, mask), label = next(self.iter);
+      preds = self.godiva([padded_text, mask]);
+      preds = preds[:,:self.godiva.frame_token_num,:-2]; # preds.shape = (batch, video_length * frame_token_num, video_vocab_size)
+      tokens = tf.math.argmax(preds, axis = -1); # tokens.shape = (batch, video_length * frame_token_num)
+      embeds = tf.gather(self.embed_tab, tokens); # embeds.shape = (batch, video_length * frame_token_num, embed_dim)
+      embeds = tf.reshape(embeds, (-1, embeds.shape[1] // self.godiva.frame_token_num, int(sqrt(self.godiva.frame_token_num)), int(sqrt(self.godiva.frame_token_num)), embeds.shape[-1])); # embed.shape = (batch, video_length, h // 4, w // 4, embed_dim)
+      video = list();
+      for i in range(embeds.shape[1]):
+        frame = embeds[:, i, ...]; # frame.shape = (batch, h//4, w//4, embed_dim)
+        recon, loss = self.decoder(frame); # recon.shape = (batch, h, w, 3)
+        video.append(recon);
+      video = tf.stack(video, axis = 1); # video.shape = (batch, video_length, h, w, 3);
+      assert video.shape[1] == 16;
+      video = tf.transpose(tf.reshape(video, (video.shape[0], 4, 4, video.shape[2], video.shape[3], video.shape[4])), (0,1,3,2,4,5));
+      video = tf.reshape(video, (video.shape[0], video.shape[1] * video.shape[2], video.shape[3] * video.shape[4], video.shape[5])); # video.shape = (batch, 4 * h, 4 * w, 3)
+      video = video * tf.reshape([0.5,0.5,0.5], (1, 1, 1, -1)) + tf.reshape([0.5,0.5,0.5], (1, 1, 1, -1));
+      video *= 255.;
+      with self.log.as_default():
+        for key, value in logs.items():
+          tf.summary.scalar(key, value, step = self.godiva.optimizer.iterations);
+        tf.summary.image('generated', video, step = self.godiva.optimizer.iterations);
 
 def main(unused_argv):
 
@@ -39,7 +73,8 @@ def main(unused_argv):
   testset = dataset_generator.get_testset().map(parse_func.parse_function).batch(FLAGS.batch_size).prefetch(tf.data.experimental.AUTOTUNE);
   callbacks = [
     tf.keras.callbacks.TensorBoard(log_dir = './checkpoints'),
-    tf.keras.callbacks.ModelCheckpoint(filepath = './checkpoints/ckpt', save_freq = 1000)
+    tf.keras.callbacks.ModelCheckpoint(filepath = './checkpoints/ckpt', save_freq = 1000),
+    SummaryCallback(godiva, eval_freq = 100),
   ];
   godiva.fit(trainset, epochs = 560, validation_data = testset, callbacks = callbacks);
   godiva.save_weights(join('models', 'godiva_weights.h5'));
