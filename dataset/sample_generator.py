@@ -44,8 +44,8 @@ class parse_function(object):
       text_vocab_size = len(dictionary);
     self.TEXT_SOS = tf.cast(text_vocab_size, dtype = tf.int64);
     self.TEXT_EOS = tf.cast(text_vocab_size + 1, dtype = tf.int64);
-    self.VIDEO_SOS = tf.cast(bottom_vocab_size, dtype = tf.int64);
-    self.VIDEO_EOS = tf.cast(bottom_vocab_size + 1, dtype = tf.int64);
+    self.VIDEO_SOS = tf.cast(vocab_size, dtype = tf.int64);
+    self.VIDEO_EOS = tf.cast(vocab_size + 1, dtype = tf.int64);
     self.frame_token_num = img_size // 4 * img_size // 4;
   def parse_function(self, sample, text):
     # sample.shape = (length, height, width, channel)
