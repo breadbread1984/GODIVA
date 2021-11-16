@@ -39,7 +39,7 @@ class SummaryCallback(tf.keras.callbacks.Callback):
       video = tf.transpose(tf.reshape(video, (video.shape[0], 4, 4, video.shape[2], video.shape[3], video.shape[4])), (0,1,3,2,4,5));
       video = tf.reshape(video, (video.shape[0], video.shape[1] * video.shape[2], video.shape[3] * video.shape[4], video.shape[5])); # video.shape = (batch, 4 * h, 4 * w, 3)
       video = video * tf.reshape([0.5,0.5,0.5], (1, 1, 1, -1)) + tf.reshape([0.5,0.5,0.5], (1, 1, 1, -1));
-      video *= 255.;
+      video = tf.cast(video * 255., dtype = tf.uint8);
       with self.log.as_default():
         for key, value in logs.items():
           tf.summary.scalar(key, value, step = self.godiva.optimizer.iterations);
