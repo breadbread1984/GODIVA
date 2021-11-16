@@ -33,7 +33,7 @@ class parse_function(object):
     assert dataset in ['single', 'double'];
     self.encoder = tf.keras.models.load_model(encoder, custom_objects = {'tf': tf, 'Quantize': Quantize, 'QuantizeEma': QuantizeEma});
     self.decoder = tf.keras.models.load_model(decoder, custom_objects = {'tf': tf});
-    quantize = self.encoder.layers[4];
+    quantize = self.encoder.get_layer('top_quantize');
     embed_tab = quantize.get_embed();
     vocab_size = tf.shape(embed_tab)[-1];
     if dataset == 'single':
