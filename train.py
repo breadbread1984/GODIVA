@@ -10,7 +10,7 @@ from vqvae import Quantize, QuantizeEma;
 from dataset.sample_generator import SampleGenerator, parse_function;
 
 FLAGS = flags.FLAGS;
-flags.DEFINE_integer('batch_size', default = 4, help = 'batch size');
+flags.DEFINE_integer('batch_size', default = 1, help = 'batch size');
 flags.DEFINE_enum('dataset', default = 'single', enum_values = ['single', 'double'], help = 'which dataset to train on');
 
 class SummaryCallback(tf.keras.callbacks.Callback):
