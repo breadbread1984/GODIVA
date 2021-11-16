@@ -68,14 +68,21 @@ if __name__ == "__main__":
 
   import cv2;
   generator = SampleGenerator('mnist_single_gif.h5');
-  trainset = generator.get_trainset();
-  testset = generator.get_testset();
+  parse_func = parse_function();
+  trainset = generator.get_trainset().map(parse_func.parse_function).batch(1);
+  decoder = parse_func.decoder;
+  embed_tab = tf.transpose(parse_func.encoder.get_layer('top_quantize').get_embed()); # embed_tab.shape = (n_embed, embed_dim)
   cv2.namedWindow('sample');
-  for sample, caption in trainset:
-    print(caption);
-    for image in sample:
-      cv2.imshow('sample',image.numpy().astype(np.uint8));
+  for (padded_text, mask), outputs in trainset:
+    tokens = outputs[:,:-parse_func.frame_token_num]; # tokens.shape = (1, video_length * frame_token_num)
+    tokens = tf.reshape(tokens, (1, 16, 16, 16)); # tokens.shape = (1, video_length = 16, height = 16, width = 16)
+    embeds = tf.gather(embed_tab, tokens); # embeds.shape = (1, video_length, height, width, embed_dim)
+    frames = list();
+    for i in range(16):
+      frame_embeds = embeds[:,i,...]; # frame_embeds.shape = (1, height, width, embed_dim)
+      recon = decoder(frame_embeds); # recon.shape = (1, 64, 64, 3)
+      recon = tf.cast((recon * 0.5 + 0.5) * 255., dtype = tf.uint8).numpy()[0]; # recon.shape = (64,64,3)
+      frames.append(recon);
+    for image in frames:
+      cv2.imshow('sample',image.astype(np.uint8));
       cv2.waitKey(50);
-  generator = SampleGenerator('mnist_two_gif.h5');
-  trainset = generator.get_trainset();
-  testset = generator.get_testset();
