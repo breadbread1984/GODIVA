@@ -33,7 +33,7 @@ class SummaryCallback(tf.keras.callbacks.Callback):
       video = list();
       for i in range(embeds.shape[1]):
         frame = embeds[:, i, ...]; # frame.shape = (batch, h//4, w//4, embed_dim)
-        recon, loss = self.decoder(frame); # recon.shape = (batch, h, w, 3)
+        recon = self.decoder(frame); # recon.shape = (batch, h, w, 3)
         video.append(recon);
       video = tf.stack(video, axis = 1); # video.shape = (batch, video_length, h, w, 3);
       assert video.shape[1] == 16;
