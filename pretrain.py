@@ -3,6 +3,7 @@
 from os import mkdir;
 from os.path import exists, join;
 from absl import flags, app;
+import numpy as np;
 import tensorflow as tf;
 from vqvae import VQVAE_Trainer, Quantize, QuantizeEma;
 from create_dataset import parse_function_generator, load_dataset;
