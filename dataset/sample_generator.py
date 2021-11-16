@@ -55,7 +55,7 @@ class parse_function(object):
     mask = tf.concat([tf.cast([0,], dtype = tf.int64), tf.ones_like(text), tf.cast([0,], dtype = tf.int64)], axis = 0); # mask.shape (length + 2)
     mask = tf.reshape(mask, (1,1,-1)); # mask.shape = (1, 1, length + 2)
     # 2) video preprocess
-    sample = sample / 255. - 0.5;
+    sample = (sample / 255. - 0.5) / 0.5;
     # tile to 3-channel images
     sample = tf.tile(sample, (1,1,1,3)); # samples.shape = (lenght, h, w, 3)
     # tokens.shape = (length, h/4, w/4)
