@@ -64,7 +64,7 @@ to test the trained VQVAE on moving mnist dataset
 PYTHONPATH=.:${PYTHONPATH} python3 dataset/sample_generator.py
 ```
 
-the shown the clips are reconstructed by VQVAE.
+the shown clips are reconstructed by VQVAE.
 
 ## train GODIVA on moving mnist dataset
 
