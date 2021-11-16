@@ -46,6 +46,8 @@ test pretrained model with command
 python3 pretrain.py --mode test --type (original|ema_update) --img <path/to/image>
 ```
 
+a pretrained model with size 64x64, token_num 10000 and ema_update trained on imagenet is enclosed under directory models
+
 a pair of imagenet-pretrained ema update encoder and decoder are provided in this repo.
 
 here are some reconstruction examples.
