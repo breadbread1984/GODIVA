@@ -62,7 +62,7 @@ class parse_function(object):
     # tokens.shape = (length, h/4, w/4)
     _, tokens, _ = self.encoder(sample);
     tokens = tf.reshape(tokens, (-1,)); # video_token_b.shape = (length * h/4 * w/4)
-    outputs = tf.concat([tokens, tf.ones((self.frame_token_num,), dtype = tf.int64) * self.VIDEO_EOS], axis = 0); # inputs.b.shape = ((length + 2) * h/4 * w/4)
+    outputs = tf.concat([tokens, tf.ones((1,), dtype = tf.int64) * self.VIDEO_EOS], axis = 0); # inputs.b.shape = ((length + 2) * h/4 * w/4)
     return (padded_text, mask), outputs;
 
 if __name__ == "__main__":
