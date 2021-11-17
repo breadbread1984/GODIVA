@@ -26,7 +26,7 @@ class SummaryCallback(tf.keras.callbacks.Callback):
     if batch % self.eval_freq == 0:
       (padded_text, mask), label = next(self.iter);
       preds = self.godiva([padded_text, mask]);
-      preds = preds[:,:-self.godiva.frame_token_num,:-2]; # preds.shape = (batch, video_length * frame_token_num, video_vocab_size)
+      preds = preds[:,:-1,:-2]; # preds.shape = (batch, video_length * frame_token_num, video_vocab_size)
       tokens = tf.math.argmax(preds, axis = -1); # tokens.shape = (batch, video_length * frame_token_num)
       embeds = tf.gather(self.embed_tab, tokens); # embeds.shape = (batch, video_length * frame_token_num, embed_dim)
       embeds = tf.reshape(embeds, (-1, embeds.shape[1] // self.godiva.frame_token_num, int(sqrt(self.godiva.frame_token_num)), int(sqrt(self.godiva.frame_token_num)), embeds.shape[-1])); # embed.shape = (batch, video_length, h // 4, w // 4, embed_dim)
