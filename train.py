@@ -45,7 +45,7 @@ class SummaryCallback(tf.keras.callbacks.Callback):
         for key, value in logs.items():
           tf.summary.scalar(key, value, step = self.godiva.optimizer.iterations);
         tf.summary.image('generated', video, step = self.godiva.optimizer.iterations);
-        tf.summary.scalar('lr', self.godiva.optimizer._decayed_lr(tf.float32), step = godiva.optimizer.iterations);
+        tf.summary.scalar('lr', self.godiva.optimizer._decayed_lr(tf.float32), step = self.godiva.optimizer.iterations);
 
 def main(unused_argv):
 
