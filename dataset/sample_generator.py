@@ -52,6 +52,7 @@ class parse_function(object):
     # text.shape = (length)
     # 1) text preprocess
     padded_text = tf.concat([[self.TEXT_SOS], text, [self.TEXT_EOS]], axis = 0); # text.shape = (length + 2)
+    # NOTE: mask padded tokens, as all sample in this datasets has the same length, no padded token is used
     mask = tf.concat([tf.cast([1,], dtype = tf.int64), tf.ones_like(text), tf.cast([1,], dtype = tf.int64)], axis = 0); # mask.shape (length + 2)
     mask = tf.reshape(mask, (1,1,-1)); # mask.shape = (1, 1, length + 2)
     # 2) video preprocess
