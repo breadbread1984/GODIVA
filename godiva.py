@@ -272,9 +272,8 @@ class GODIVA(tf.keras.Model):
   def __init__(self, img_size = 64, video_length = 16, text_vocab_size = None, video_vocab_size = 10000, **kwargs):
     super(GODIVA, self).__init__(**kwargs);
     self.video_length = video_length;
-    self.transformer = Transformer(origin_shape = (img_size // 4, img_size // 4), text_vocab_size = text_vocab_size + 2, video_vocab_size = video_vocab_size + 2, drop_rate = 0.2);
+    self.transformer = Transformer(origin_shape = (img_size // 4, img_size // 4), text_vocab_size = text_vocab_size, video_vocab_size = video_vocab_size + 1, drop_rate = 0.2);
     self.VIDEO_SOS = video_vocab_size;
-    self.VIDEO_EOS = video_vocab_size + 1;
     self.frame_token_num = img_size // 4 * img_size // 4;
   def call(self, inputs):
     # inputs.shape = (batch, length)
@@ -282,7 +281,7 @@ class GODIVA(tf.keras.Model):
     mask = inputs[1]; # mask.shape = (batch, 1, 1, text_length)
     total_tokens = tf.ones((tf.shape(text)[0], self.frame_token_num), dtype = tf.int64) * self.VIDEO_SOS; # tokens.shape = (batch, (origin_shape // 4) ** 2)
     total_preds = tf.ones((tf.shape(text)[0], 0, self.transformer.output[0].shape[-1]), dtype = tf.float32); # preds.shape = (batch, 0, video_vocab_size + 2)
-    for i in range(self.video_length + 1):
+    for i in range(self.video_length):
       pred = self.transformer([text, mask, total_tokens]); # bottom_pred.shape = (batch, length, video_vocab_size + 2)
       tokens = tf.math.argmax(pred, axis = -1); # tokens.shape = (batch, length)
       total_tokens = tf.concat([total_tokens, tokens[:,-self.frame_token_num:]], axis = 1); # bottom_tokens.shape = (batch, length + bottom_frame_token_num)
