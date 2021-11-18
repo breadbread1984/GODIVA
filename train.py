@@ -12,6 +12,7 @@ from dataset.sample_generator import SampleGenerator, parse_function;
 FLAGS = flags.FLAGS;
 flags.DEFINE_integer('batch_size', default = 1, help = 'batch size');
 flags.DEFINE_enum('dataset', default = 'single', enum_values = ['single', 'double'], help = 'which dataset to train on');
+flags.DEFINE_string('checkpoint', default = 'checkpoints', help = 'path to checkpoint');
 
 class SummaryCallback(tf.keras.callbacks.Callback):
   def __init__(self, godiva, validationset, eval_freq = 100):
@@ -21,7 +22,7 @@ class SummaryCallback(tf.keras.callbacks.Callback):
     self.embed_tab = tf.transpose(encoder.get_layer('top_quantize').get_embed()); # embed_tab.shape = (n_embed, embed_dim)
     self.eval_freq = eval_freq;
     self.iter = iter(validationset);
-    self.log = tf.summary.create_file_writer('checkpoints');
+    self.log = tf.summary.create_file_writer(FLAGS.checkpoint);
   def on_batch_end(self, batch, logs = None):
     if batch % self.eval_freq == 0:
       (padded_text, mask), label = next(self.iter);
@@ -58,8 +59,8 @@ def main(unused_argv):
     text_vocab_size = len(dictionary);
     filename = 'mnist_two_gif.h5';
 
-  if exists('./checkpoints/ckpt'):
-    godiva = tf.keras.models.load_model('./checkpoints/ckpt', custom_objects = {'tf': tf, 'Quantize': Quantize, 'QuantizeEma': QuantizeEma}, compile = True);
+  if exists(join(FLAGS.checkpoint, 'ckpt')):
+    godiva = tf.keras.models.load_model(join(FLAGS.checkpoint, 'ckpt'), custom_objects = {'tf': tf, 'Quantize': Quantize, 'QuantizeEma': QuantizeEma}, compile = True);
     optimizer = godiva.optimizer;
   else:
     godiva = GODIVA(text_vocab_size = text_vocab_size);
@@ -74,8 +75,8 @@ def main(unused_argv):
   testset = dataset_generator.get_testset().map(parse_func.parse_function).batch(FLAGS.batch_size).prefetch(tf.data.experimental.AUTOTUNE);
   validationset = dataset_generator.get_testset().map(parse_func.parse_function).batch(1);
   callbacks = [
-    tf.keras.callbacks.TensorBoard(log_dir = './checkpoints'),
-    tf.keras.callbacks.ModelCheckpoint(filepath = './checkpoints/ckpt', save_freq = 1000),
+    tf.keras.callbacks.TensorBoard(log_dir = FLAGS.checkpoint),
+    tf.keras.callbacks.ModelCheckpoint(filepath = join(FLAGS.checkpoint, 'ckpt'), save_freq = 1000),
     SummaryCallback(godiva, validationset, eval_freq = 100),
   ];
   godiva.fit(trainset, epochs = 560, validation_data = testset, callbacks = callbacks);
