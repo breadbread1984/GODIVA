@@ -11,6 +11,7 @@ from dataset.sample_generator import SampleGenerator, parse_function;
 FLAGS = flags.FLAGS;
 
 def add_options():
+  flags.DEFINE_enum('dataset', default = 'single', enum_values = ['single', 'double'], help = 'which dataset to train on');
   flags.DEFINE_string('checkpoint', default = 'checkpoints', help = 'path to checkpoint');
 
 def main(unused_argv):
@@ -18,6 +19,15 @@ def main(unused_argv):
   decoder = tf.keras.models.load_model(join('models', 'decoder.h5'));
   embed_tab = tf.transpose(encoder.get_layer('top_quantize').get_embed()); # embed_tab.shape = (n_embed, embed_dim)
   godiva = tf.keras.models.load_model(join(FLAGS.checkpoint, 'ckpt'), custom_objects = {'tf': tf, 'Quantize': Quantize, 'QuantizeEma': QuantizeEma}, compile = True);
+  if FLAGS.dataset == 'single':
+    from dataset.mnist_caption_single import dictionary;
+    text_vocab_size = len(dictionary);
+    filename = 'mnist_single_gif.h5';
+  elif argv[1] == 'double':
+    from dataset.mnist_caption_two_digit import dictionary;
+    text_vocab_size = len(dictionary);
+    filename = 'mnist_two_gif.h5';
+  dataset_generator = SampleGenerator(filename);
   testset = dataset_generator.get_testset().map(parse_func.parse_function).batch(1);
   for (padded_text, mask), label in testset:
     preds = godiva([padded_text, mask]);
