@@ -45,7 +45,7 @@ def main(unused_argv):
       recon = decoder(frame); # recon.shape = (batch, h, w, 3)
       video.append(recon);
     video = tf.stack(video, axis = 1); # video.shape = (batch, video_length, h, w, 3);
-    video = tf.cast(video[0], dtype = tf.uint8).numpy(); # video.shape = (video_length, h, w, 3);
+    video = tf.cast((video[0] * 0.5 + 0.5) * 255., dtype = tf.uint8).numpy(); # video.shape = (video_length, h, w, 3);
     for frame in video:
       cv2.imshow('frame', frame);
       cv2.waitKey(25);
