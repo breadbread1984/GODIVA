@@ -28,6 +28,7 @@ def main(unused_argv):
     text_vocab_size = len(dictionary);
     filename = 'mnist_two_gif.h5';
   dataset_generator = SampleGenerator(filename);
+  parse_func = parse_function();
   testset = dataset_generator.get_testset().map(parse_func.parse_function).batch(1);
   for (padded_text, mask), label in testset:
     preds = godiva([padded_text, mask]);
