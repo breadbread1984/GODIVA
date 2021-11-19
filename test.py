@@ -1,11 +1,13 @@
 #!/usr/bin/python3
 
 from os.path import join;
+from math import sqrt;
 from absl import flags, app;
 import numpy as np;
 import cv2;
 import tensorflow as tf;
 from vqvae import *;
+from godiva import *;
 from dataset.sample_generator import SampleGenerator, parse_function;
 
 FLAGS = flags.FLAGS;
@@ -18,7 +20,6 @@ def main(unused_argv):
   encoder = tf.keras.models.load_model(join('models', 'encoder.h5'), custom_objects = {'tf': tf, 'Quantize': Quantize, 'QuantizeEma': QuantizeEma});
   decoder = tf.keras.models.load_model(join('models', 'decoder.h5'));
   embed_tab = tf.transpose(encoder.get_layer('top_quantize').get_embed()); # embed_tab.shape = (n_embed, embed_dim)
-  godiva = tf.keras.models.load_model(join(FLAGS.checkpoint, 'ckpt'), custom_objects = {'tf': tf, 'Quantize': Quantize, 'QuantizeEma': QuantizeEma}, compile = True);
   if FLAGS.dataset == 'single':
     from dataset.mnist_caption_single import dictionary;
     text_vocab_size = len(dictionary);
@@ -27,6 +28,8 @@ def main(unused_argv):
     from dataset.mnist_caption_two_digit import dictionary;
     text_vocab_size = len(dictionary);
     filename = 'mnist_two_gif.h5';
+  godiva = GODIVA(text_vocab_size = text_vocab_size);
+  godiva.transformer = tf.keras.models.load_model(join('models', 'transformer.h5'));
   dataset_generator = SampleGenerator(filename);
   parse_func = parse_function();
   testset = dataset_generator.get_testset().map(parse_func.parse_function).batch(1);
