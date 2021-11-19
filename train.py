@@ -63,7 +63,7 @@ def main(unused_argv):
     optimizer = godiva.optimizer;
   else:
     godiva = GODIVA(text_vocab_size = text_vocab_size);
-    optimizer = tf.keras.optimizers.Adam(tf.keras.optimizers.schedules.ExponentialDecay(3e-4, decay_steps = 4000, decay_rate = 0.1, staircase = True));
+    optimizer = tf.keras.optimizers.Adam(tf.keras.optimizers.schedules.ExponentialDecay(3e-4, decay_steps = 4000, decay_rate = 0.8, staircase = True));
     godiva.compile(optimizer = optimizer,
                    loss = [tf.keras.losses.SparseCategoricalCrossentropy(name = 'ce_loss')],
                    metrics = [tf.keras.metrics.SparseCategoricalAccuracy(name = 'acc')]);
