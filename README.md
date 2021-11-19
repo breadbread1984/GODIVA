@@ -71,5 +71,10 @@ the shown clips are reconstructed by VQVAE.
 train GODIVA with command
 
 ```shell
-python3 train.py (single|double)
+python3 train.py --dataset (single|double) --batch_size <batch size> --checkpoint <path/to/checkpoint>
+```
+test GODIVA with checkpoint with command
+
+```shell
+python3 test.py --dataset (single|double) --checkpoint <path/to/checkpoint>
 ```
