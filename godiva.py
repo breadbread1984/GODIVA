@@ -61,7 +61,8 @@ def AxialAttention(key_dim, value_dim, num_heads, drop_rate = 0.5, origin_shape 
   reshaped_value = tf.keras.layers.Lambda(lambda x: tf.reshape(x, (tf.shape(x)[0], -1, tf.shape(x)[-2], tf.shape(x)[-1])))(reshaped_value); # value.shape = (batch, heads * np.prod(other_dims), axial_dim_length, dim)
   # 1) correlation matrix of query and key
   qk = tf.keras.layers.Lambda(lambda x: tf.linalg.matmul(x[0], x[1], transpose_b = True))([reshaped_query, reshaped_key]);
-  logits = tf.keras.layers.Lambda(lambda x, kd: x / tf.math.sqrt(tf.cast(kd, dtype = tf.float32)), arguments = {'kd': key_dim // num_heads})(qk); # logits.shape = (batch, heads * np.prod(other_dims), query_length = axial_dim_length, key_length = axial_dim_length)
+  look_ahead_mask = tf.keras.layers.Lambda(lambda x: tf.linalg.band_part(tf.ones(tf.shape(x)), -1, 0))(qk);
+  logits = tf.keras.layers.Lambda(lambda x, kd: x[0] / tf.math.sqrt(tf.cast(kd, dtype = tf.float32)) + (1 - x[1]) * -1e9, arguments = {'kd': key_dim // num_heads})([qk, look_ahead_mask]); # logits.shape = (batch, heads * np.prod(other_dims), query_length = axial_dim_length, key_length = axial_dim_length)
   attention = tf.keras.layers.Softmax()(logits); # attention.shape = (batch, heads * np.prod(other_dims), query_length = axial_dim_length, key_length = axial_dim_length)
   attention = tf.keras.layers.Dropout(rate = drop_rate)(attention);
   # 2) weighted sum of value elements for each query element
