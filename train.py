@@ -70,9 +70,9 @@ def main(unused_argv):
   # generate dataset
   dataset_generator = SampleGenerator(filename);
   parse_func = parse_function();
-  trainset = dataset_generator.get_trainset().map(parse_func.parse_function).batch(FLAGS.batch_size).prefetch(tf.data.experimental.AUTOTUNE);
-  testset = dataset_generator.get_testset().map(parse_func.parse_function).batch(FLAGS.batch_size).prefetch(tf.data.experimental.AUTOTUNE);
-  validationset = dataset_generator.get_testset().map(parse_func.parse_function).batch(1);
+  trainset = dataset_generator.get_trainset().map(parse_func.parse_function, num_parallel_calls = tf.data.AUTOTUNE).batch(FLAGS.batch_size).prefetch(tf.data.experimental.AUTOTUNE);
+  testset = dataset_generator.get_testset().map(parse_func.parse_function, num_parallel_calls = tf.data.AUTOTUNE).batch(FLAGS.batch_size).prefetch(tf.data.experimental.AUTOTUNE);
+  validationset = dataset_generator.get_testset().map(parse_func.parse_function, num_parallel_calls = tf.data.AUTOTUNE).batch(1);
   callbacks = [
     tf.keras.callbacks.TensorBoard(log_dir = FLAGS.checkpoint),
     tf.keras.callbacks.ModelCheckpoint(filepath = join(FLAGS.checkpoint, 'ckpt'), save_freq = 1000),
